@@ -8,7 +8,7 @@ from keras._tf_keras.keras.utils import to_categorical
 from itertools import product
 from sklearn import metrics
 from keras._tf_keras.keras import Sequential
-from keras._tf_keras.keras.layers import GRU, Dense, Dropout, BatchNormalization
+from keras._tf_keras.keras.layers import LSTM, Dense, Dropout, BatchNormalization, Bidirectional
 from keras._tf_keras.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from keras._tf_keras.keras.optimizers import Adam
 
@@ -43,24 +43,24 @@ X, Y = np.array(landmarks), to_categorical(labels).astype(int)
 # Split the data into training and testing sets
 X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.15, random_state=34, stratify=Y)
 
-# Define the enhanced model architecture with GRU layers
+# Define the enhanced model architecture with regularization
 model = Sequential([
-    # First GRU layer with regularization
-    GRU(64, return_sequences=True, activation='relu', 
-        input_shape=(frames, 126),
-        kernel_regularizer='l2'),
+    # First LSTM layer with regularization
+    LSTM(64, return_sequences=True, activation='relu', 
+         input_shape=(frames, 126),
+         kernel_regularizer='l2'),
     BatchNormalization(),
     Dropout(0.4),
     
-    # Second GRU layer
-    GRU(128, return_sequences=True, activation='relu',
-        kernel_regularizer='l2'),
+    # Second LSTM layer
+    LSTM(128, return_sequences=True, activation='relu',
+         kernel_regularizer='l2'),
     BatchNormalization(),
     Dropout(0.4),
     
-    # Third GRU layer
-    GRU(64, return_sequences=False, activation='relu',
-        kernel_regularizer='l2'),
+    # Third LSTM layer
+    LSTM(64, return_sequences=False, activation='relu',
+         kernel_regularizer='l2'),
     BatchNormalization(),
     Dropout(0.4),
     
