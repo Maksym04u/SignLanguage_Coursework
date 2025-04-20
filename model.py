@@ -7,8 +7,8 @@ from sklearn.model_selection import train_test_split
 from keras._tf_keras.keras.utils import to_categorical
 from itertools import product
 from sklearn import metrics
-from keras._tf_keras.keras import Sequential
-from keras._tf_keras.keras.layers import LSTM, Dense, Dropout, BatchNormalization, Bidirectional
+from keras._tf_keras.keras import Sequential, Model
+from keras._tf_keras.keras.layers import GRU, Dense, Dropout, BatchNormalization, Input, Attention, Concatenate
 from keras._tf_keras.keras.callbacks import EarlyStopping, ReduceLROnPlateau
 from keras._tf_keras.keras.optimizers import Adam
 
@@ -43,35 +43,45 @@ X, Y = np.array(landmarks), to_categorical(labels).astype(int)
 # Split the data into training and testing sets
 X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.15, random_state=34, stratify=Y)
 
-# Define the enhanced model architecture with regularization
-model = Sequential([
-    # First LSTM layer with regularization
-    LSTM(64, return_sequences=True, activation='relu', 
-         input_shape=(frames, 126),
-         kernel_regularizer='l2'),
-    BatchNormalization(),
-    Dropout(0.4),
+# Define the enhanced model architecture with GRU layers and attention
+def create_model(input_shape, num_classes):
+    # Input layer
+    inputs = Input(shape=input_shape)
     
-    # Second LSTM layer
-    LSTM(128, return_sequences=True, activation='relu',
-         kernel_regularizer='l2'),
-    BatchNormalization(),
-    Dropout(0.4),
+    # First GRU layer
+    x = GRU(64, return_sequences=True, activation='tanh',
+            kernel_regularizer='l2')(inputs)
+    x = BatchNormalization()(x)
+    x = Dropout(0.4)(x)
     
-    # Third LSTM layer
-    LSTM(64, return_sequences=False, activation='relu',
-         kernel_regularizer='l2'),
-    BatchNormalization(),
-    Dropout(0.4),
+    # Second GRU layer
+    x = GRU(128, return_sequences=True, activation='tanh',
+            kernel_regularizer='l2')(x)
+    x = BatchNormalization()(x)
+    x = Dropout(0.4)(x)
     
-    # Dense layers with regularization
-    Dense(64, activation='relu', kernel_regularizer='l2'),
-    BatchNormalization(),
-    Dropout(0.4),
+    # Attention mechanism
+    attention = Attention()([x, x])
+    x = Concatenate()([x, attention])
+    
+    # Third GRU layer
+    x = GRU(64, return_sequences=False, activation='tanh',
+            kernel_regularizer='l2')(x)
+    x = BatchNormalization()(x)
+    x = Dropout(0.4)(x)
+    
+    # Dense layers
+    x = Dense(64, activation='relu', kernel_regularizer='l2')(x)
+    x = BatchNormalization()(x)
+    x = Dropout(0.4)(x)
     
     # Output layer
-    Dense(actions.shape[0], activation='softmax')
-])
+    outputs = Dense(num_classes, activation='softmax')(x)
+    
+    return Model(inputs=inputs, outputs=outputs)
+
+# Create the model
+model = create_model(input_shape=(frames, 126), num_classes=len(actions))
 
 # Compile the model with Adam optimizer and categorical cross-entropy loss
 optimizer = Adam(learning_rate=0.0005)  # Reduced learning rate

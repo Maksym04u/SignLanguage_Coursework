@@ -109,7 +109,7 @@ class SignLanguageTranslator:
         self.current_prediction = self.actions[np.argmax(prediction)]
         
         # Only accept predictions with high confidence
-        if self.current_confidence > 0.95:
+        if self.current_confidence > 0.98:
             return self.current_prediction
         return None
         
