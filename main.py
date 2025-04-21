@@ -12,6 +12,7 @@ from keras._tf_keras.keras.models import load_model
 import language_tool_python
 import time
 import logging
+from collections import deque
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -26,12 +27,21 @@ class SignLanguageTranslator:
         
         # Initialize lists
         self.sentence = []
-        self.keypoints = []
+        self.keypoints_buffer = deque(maxlen=20)  # Buffer to store the last 20 frames
         self.last_prediction = None
         self.grammar_result = None
         self.detection_area = None
         self.current_confidence = 0.0
         self.current_prediction = None
+        
+        # Performance tracking
+        self.frame_count = 0
+        self.last_prediction_time = 0
+        self.prediction_interval = 0.5  # Make predictions every 0.5 seconds
+        
+        # Buffer reset mechanism
+        self.last_landmark_time = 0
+        self.buffer_timeout = 2.0  # Reset buffer after 2 seconds of no landmarks
         
         # Load model with error handling
         try:
@@ -92,7 +102,7 @@ class SignLanguageTranslator:
         
         # Draw confidence level
         confidence_width = int(bar_width * self.current_confidence)
-        color = (0, 255, 0) if self.current_confidence >= 0.9 else (0, 165, 255)  # Green if confident, orange if not
+        color = (0, 255, 0) if self.current_confidence >= 0.98 else (0, 165, 255)  # Green if confident, orange if not
         cv2.rectangle(image, (x, y), (x + confidence_width, y + bar_height), color, -1)
         
         # Draw border
@@ -108,9 +118,12 @@ class SignLanguageTranslator:
         self.current_confidence = np.amax(prediction)
         self.current_prediction = self.actions[np.argmax(prediction)]
         
-        # Only accept predictions with high confidence
-        if self.current_confidence > 0.98:
-            return self.current_prediction
+        # Check if we have a high confidence prediction (threshold at 98%)
+        if self.current_confidence >= 0.98:
+            # Only return the prediction if it's different from the last one
+            if self.last_prediction != self.current_prediction:
+                return self.current_prediction
+                
         return None
         
     def update_sentence(self, new_sign: str) -> None:
@@ -140,11 +153,12 @@ class SignLanguageTranslator:
     def reset(self) -> None:
         """Reset all state variables"""
         self.sentence = []
-        self.keypoints = []
+        self.keypoints_buffer.clear()  # Clear the buffer
         self.last_prediction = None
         self.grammar_result = None
         self.current_confidence = 0.0
         self.current_prediction = None
+        self.last_landmark_time = time.time()  # Reset the landmark time
         
     def run(self) -> None:
         """Main translation loop"""
@@ -167,6 +181,13 @@ class SignLanguageTranslator:
                         logging.error("Failed to grab frame")
                         continue
                         
+                    current_time = time.time()
+                    
+                    # Check if buffer timeout has occurred
+                    if len(self.keypoints_buffer) > 0 and (current_time - self.last_landmark_time) > self.buffer_timeout:
+                        logging.info("Buffer timeout - resetting buffer")
+                        self.keypoints_buffer.clear()
+                        
                     # Process image and get landmarks using the same function as data collection
                     try:
                         results = image_process(image, holistic)
@@ -174,21 +195,38 @@ class SignLanguageTranslator:
                         # Draw landmarks
                         draw_landmarks(image, results)
                         
-                        # Extract and store keypoints
-                        keypoints = keypoint_extraction(results)
-                        if keypoints is not None:
-                            self.keypoints.append(keypoints)
+                        # Check if hands are detected
+                        hands_detected = results.left_hand_landmarks is not None or results.right_hand_landmarks is not None
+                        
+                        if hands_detected:
+                            # Extract and store keypoints
+                            keypoints = keypoint_extraction(results)
                             
-                            # Process when we have enough frames
-                            if len(self.keypoints) == 10:
-                                keypoints_array = np.array(self.keypoints)
-                                prediction = self.model.predict(keypoints_array[np.newaxis, :, :])
-                                self.keypoints = []  # Reset for next sequence
+                            if keypoints is not None:
+                                # Update the last landmark time
+                                self.last_landmark_time = current_time
                                 
-                                # Process prediction
-                                predicted_sign = self.process_prediction(prediction)
-                                if predicted_sign:
-                                    self.update_sentence(predicted_sign)
+                                # Add to the buffer (automatically maintains maxlen=20)
+                                self.keypoints_buffer.append(keypoints)
+                                
+                                # Process when we have enough frames (20 frames = ~1.6 seconds)
+                                # and enough time has passed since the last prediction
+                                if len(self.keypoints_buffer) == 20 and (current_time - self.last_prediction_time) >= self.prediction_interval:
+                                    # Convert buffer to numpy array
+                                    keypoints_array = np.array(list(self.keypoints_buffer))
+                                    
+                                    # Make prediction
+                                    prediction = self.model.predict(keypoints_array[np.newaxis, :, :], verbose=0)
+                                    self.last_prediction_time = current_time
+                                    
+                                    # Process prediction
+                                    predicted_sign = self.process_prediction(prediction)
+                                    if predicted_sign:
+                                        self.update_sentence(predicted_sign)
+                        else:
+                            # No hands detected, display message on screen
+                            cv2.putText(image, "No hands detected", (20, 350),
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
                                     
                     except Exception as e:
                         logging.error(f"Error processing frame: {e}")
@@ -203,7 +241,33 @@ class SignLanguageTranslator:
                     # Display current prediction if confidence is above 0.5
                     if self.current_confidence > 0.5:
                         prediction_text = f'Detected: {self.current_prediction}'
-                        cv2.putText(image, prediction_text, (20, 150),
+                        cv2.putText(image, prediction_text, (20, 200),
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+                    
+                    # Display buffer size with color indication
+                    buffer_size = len(self.keypoints_buffer)
+                    buffer_text = f'Buffer: {buffer_size}/20 frames'
+                    
+                    # Change color based on buffer status
+                    if buffer_size == 20:
+                        color = (0, 255, 0)  # Green when full
+                        cv2.putText(image, "Buffer full - analyzing gesture", (20, 400),
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
+                    elif buffer_size > 15:
+                        color = (0, 255, 255)  # Yellow when almost full
+                    else:
+                        color = (255, 255, 255)  # White otherwise
+                        
+                    cv2.putText(image, buffer_text, (20, 250),
+                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+                    
+                    # Display FPS
+                    self.frame_count += 1
+                    if current_time - self.last_prediction_time >= 1.0:
+                        fps = self.frame_count
+                        self.frame_count = 0
+                        fps_text = f'FPS: {fps}'
+                        cv2.putText(image, fps_text, (20, 300),
                                   cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
                     
                     # Handle keyboard inputs

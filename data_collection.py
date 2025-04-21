@@ -15,7 +15,7 @@ from typing import List
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
 class SignLanguageDataCollector:
-    def __init__(self, actions: List[str], sequences: int = 30, frames: int = 10):
+    def __init__(self, actions: List[str], sequences: int = 30, frames: int = 20):
         self.actions = np.array(actions)
         self.sequences = sequences
         self.frames = frames
@@ -148,7 +148,7 @@ class SignLanguageDataCollector:
 
 if __name__ == "__main__":
     # Define the actions (signs) that will be recorded
-    actions = ['a', 'b', 'c', 'd']
+    actions = ['Hello', "Father", "Mother", 'See you later']
     
     # Create collector instance and start data collection
     collector = SignLanguageDataCollector(actions)

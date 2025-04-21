@@ -19,8 +19,8 @@ PATH = os.path.join('data')
 actions = np.array(os.listdir(PATH))
 
 # Define the number of sequences and frames
-sequences = 20  # Changed to match your data collection
-frames = 10
+sequences = 30  # Changed to match your data collection
+frames = 20
 
 # Create a label map to map each action label to a numeric value
 label_map = {label:num for num, label in enumerate(actions)}
@@ -71,7 +71,7 @@ def create_model(input_shape, num_classes):
     x = Dropout(0.4)(x)
     
     # Dense layers
-    x = Dense(64, activation='relu', kernel_regularizer='l2')(x)
+    x = Dense(64, activation='tanh', kernel_regularizer='l2')(x)
     x = BatchNormalization()(x)
     x = Dropout(0.4)(x)
     

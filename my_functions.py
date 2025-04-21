@@ -43,18 +43,40 @@ def image_process(image, model):
 
 def keypoint_extraction(results):
     """
-    Extract the keypoints from the sign landmarks.
+    Extract and normalize the keypoints from the sign landmarks.
 
     Args:
         results: The processed results containing sign landmarks.
 
     Returns:
-        keypoints (numpy.ndarray): The extracted keypoints.
+        keypoints (numpy.ndarray): The normalized keypoints.
     """
-    # Extract the keypoints for the left hand if present, otherwise set to zeros
-    lh = np.array([[res.x, res.y, res.z] for res in results.left_hand_landmarks.landmark]).flatten() if results.left_hand_landmarks else np.zeros(63)
-    # Extract the keypoints for the right hand if present, otherwise set to zeros
-    rh = np.array([[res.x, res.y, res.z] for res in results.right_hand_landmarks.landmark]).flatten() if results.right_hand_landmarks else np.zeros(63)
-    # Concatenate the keypoints for both hands
+    def normalize_hand_landmarks(landmarks):
+        if not landmarks:
+            return np.zeros(63)
+            
+        # Convert landmarks to numpy array
+        points = np.array([[res.x, res.y, res.z] for res in landmarks.landmark])
+        
+        # Get wrist position (first landmark)
+        wrist = points[0]
+        
+        # Normalize by subtracting wrist position (relative to wrist)
+        normalized = points - wrist
+        
+        # Scale using hand spread (bounding box size)
+        # This is more stable than wrist-to-fingertip distance
+        # as it accounts for the entire hand shape
+        hand_spread = np.linalg.norm(points.max(axis=0) - points.min(axis=0))
+        if hand_spread > 0:  # Avoid division by zero
+            normalized = normalized / hand_spread
+            
+        return normalized.flatten()
+    
+    # Extract and normalize keypoints for both hands
+    lh = normalize_hand_landmarks(results.left_hand_landmarks)
+    rh = normalize_hand_landmarks(results.right_hand_landmarks)
+    
+    # Concatenate the normalized keypoints for both hands
     keypoints = np.concatenate([lh, rh])
     return keypoints
