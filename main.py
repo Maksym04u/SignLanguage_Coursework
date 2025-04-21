@@ -37,11 +37,16 @@ class SignLanguageTranslator:
         # Performance tracking
         self.frame_count = 0
         self.last_prediction_time = 0
-        self.prediction_interval = 0.5  # Make predictions every 0.5 seconds
+        self.prediction_interval = 0.7  # Make predictions every 0.5 seconds
         
         # Buffer reset mechanism
         self.last_landmark_time = 0
-        self.buffer_timeout = 2.0  # Reset buffer after 2 seconds of no landmarks
+        self.buffer_timeout = 1.0  # Reset buffer after 2 seconds of no landmarks
+        
+        # Recognition state
+        self.recognition_in_progress = False
+        self.recognition_start_time = 0
+        self.recognition_duration = 1.0  # Duration to show recognition message
         
         # Load model with error handling
         try:
@@ -143,6 +148,14 @@ class SignLanguageTranslator:
                     self.sentence[-1] = self.sentence[-2] + self.sentence[-1]
                     self.sentence.pop(-2)
                     self.sentence[-1] = self.sentence[-1].capitalize()
+            
+            # Reset the buffer after recognizing a symbol
+            self.keypoints_buffer.clear()
+            logging.info(f"Buffer reset after recognizing symbol: {new_sign}")
+            
+            # Set recognition state
+            self.recognition_in_progress = True
+            self.recognition_start_time = time.time()
                     
     def check_grammar(self) -> None:
         """Check and correct grammar of the current sentence"""
@@ -159,6 +172,7 @@ class SignLanguageTranslator:
         self.current_confidence = 0.0
         self.current_prediction = None
         self.last_landmark_time = time.time()  # Reset the landmark time
+        self.recognition_in_progress = False
         
     def run(self) -> None:
         """Main translation loop"""
@@ -182,6 +196,10 @@ class SignLanguageTranslator:
                         continue
                         
                     current_time = time.time()
+                    
+                    # Check if recognition message should be hidden
+                    if self.recognition_in_progress and (current_time - self.recognition_start_time) > self.recognition_duration:
+                        self.recognition_in_progress = False
                     
                     # Check if buffer timeout has occurred
                     if len(self.keypoints_buffer) > 0 and (current_time - self.last_landmark_time) > self.buffer_timeout:
@@ -260,6 +278,11 @@ class SignLanguageTranslator:
                         
                     cv2.putText(image, buffer_text, (20, 250),
                               cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+                    
+                    # Display recognition message if in progress
+                    if self.recognition_in_progress:
+                        cv2.putText(image, f"Recognized: {self.last_prediction}", (20, 450),
+                                  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
                     
                     # Display FPS
                     self.frame_count += 1
