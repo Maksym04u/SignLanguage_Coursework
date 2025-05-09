@@ -48,6 +48,10 @@ class SignLanguageTranslator:
         self.recognition_start_time = 0
         self.recognition_duration = 1.0  # Duration to show recognition message
         
+        # Buffer reset delay
+        self.buffer_reset_delay = 0.75  # Wait 0.5 seconds before resetting buffer after recognition
+        self.buffer_reset_time = 0  # Time when buffer should be reset
+        
         # Load model with error handling
         try:
             self.model = load_model('my_model.h5')
@@ -149,9 +153,9 @@ class SignLanguageTranslator:
                     self.sentence.pop(-2)
                     self.sentence[-1] = self.sentence[-1].capitalize()
             
-            # Reset the buffer after recognizing a symbol
-            self.keypoints_buffer.clear()
-            logging.info(f"Buffer reset after recognizing symbol: {new_sign}")
+            # Schedule buffer reset after delay
+            self.buffer_reset_time = time.time() + self.buffer_reset_delay
+            logging.info(f"Scheduled buffer reset in {self.buffer_reset_delay} seconds after recognizing: {new_sign}")
             
             # Set recognition state
             self.recognition_in_progress = True
@@ -173,6 +177,7 @@ class SignLanguageTranslator:
         self.current_prediction = None
         self.last_landmark_time = time.time()  # Reset the landmark time
         self.recognition_in_progress = False
+        self.buffer_reset_time = 0  # Reset the buffer reset time
         
     def run(self) -> None:
         """Main translation loop"""
@@ -200,6 +205,12 @@ class SignLanguageTranslator:
                     # Check if recognition message should be hidden
                     if self.recognition_in_progress and (current_time - self.recognition_start_time) > self.recognition_duration:
                         self.recognition_in_progress = False
+                    
+                    # Check if buffer should be reset after recognition delay
+                    if self.buffer_reset_time > 0 and current_time >= self.buffer_reset_time:
+                        self.keypoints_buffer.clear()
+                        logging.info("Buffer reset after recognition delay")
+                        self.buffer_reset_time = 0
                     
                     # Check if buffer timeout has occurred
                     if len(self.keypoints_buffer) > 0 and (current_time - self.last_landmark_time) > self.buffer_timeout:
