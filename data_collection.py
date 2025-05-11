@@ -20,7 +20,6 @@ class SignLanguageDataCollector:
         self.sequences = sequences
         self.frames = frames
         self.PATH = os.path.join('data')
-        self.detection_area = None
         self.setup_directories()
         
     def setup_directories(self) -> None:
@@ -32,39 +31,6 @@ class SignLanguageDataCollector:
         except Exception as e:
             logging.error(f"Error creating directories: {e}")
             raise
-
-    def setup_detection_area(self, frame_width: int, frame_height: int) -> None:
-        """Setup the detection area on the left side of the frame"""
-        # Position on the left side, taking up about 60% of the frame height
-        area_size = int(frame_height * 0.6)  # Larger area
-        margin = int(frame_height * 0.1)  # 10% margin from the top
-        
-        self.detection_area = {
-            'x1': 50,  # Fixed margin from left edge
-            'y1': margin,
-            'x2': 50 + area_size,  # Square area
-            'y2': margin + area_size
-        }
-
-    def draw_detection_area(self, image: np.ndarray, recording: bool = False) -> None:
-        """Draw the detection area and guidance on the image"""
-        if self.detection_area is None:
-            return
-            
-        # Draw the detection area rectangle
-        color = (0, 255, 0) if not recording else (0, 0, 255)  # Green when waiting, Red when recording
-        thickness = 2 if not recording else 3  # Thicker border when recording
-        
-        cv2.rectangle(image, 
-                     (self.detection_area['x1'], self.detection_area['y1']),
-                     (self.detection_area['x2'], self.detection_area['y2']),
-                     color, thickness)
-        
-        # Add guidance text
-        text = 'Perform sign here' if not recording else 'Recording...'
-        cv2.putText(image, text,
-                    (self.detection_area['x1'], self.detection_area['y1'] - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
 
     def initialize_camera(self) -> cv2.VideoCapture:
         """Initialize camera with basic error handling"""
@@ -78,16 +44,12 @@ class SignLanguageDataCollector:
         """Data collection loop with improved interface"""
         cap = self.initialize_camera()
         
-        # Get frame dimensions and setup detection area
-        ret, frame = cap.read()
-        if ret:
-            self.setup_detection_area(frame.shape[1], frame.shape[0])
-        
         try:
             with mp.solutions.holistic.Holistic(min_detection_confidence=0.75, min_tracking_confidence=0.75) as holistic:
                 for action, sequence in product(self.actions, range(self.sequences)):
                     print(f"\nRecording {action}, sequence {sequence + 1}/{self.sequences}")
                     print("Press SPACE to start recording, 'q' to quit")
+                    print("You can use either your left or right hand - the system will handle it correctly")
                     
                     # Wait for space key
                     while True:
@@ -95,9 +57,11 @@ class SignLanguageDataCollector:
                         if not ret:
                             continue
                             
+                        # Flip the image horizontally before processing
+                        image = cv2.flip(image, 1)
+                            
                         results = image_process(image, holistic)
                         draw_landmarks(image, results)
-                        self.draw_detection_area(image)
                         
                         # Display instructions
                         cv2.putText(image, f'Action: {action}', (20, 20), 
@@ -121,11 +85,13 @@ class SignLanguageDataCollector:
                         if not ret:
                             continue
                             
+                        # Flip the image horizontally before processing
+                        image = cv2.flip(image, 1)
+                            
                         results = image_process(image, holistic)
                         draw_landmarks(image, results)
-                        self.draw_detection_area(image, recording=True)
                         
-                        # Save keypoints
+                        # Save keypoints using the same function as the translator
                         keypoints = keypoint_extraction(results)
                         frame_path = os.path.join(self.PATH, action, str(sequence), str(frame))
                         np.save(frame_path, keypoints)
@@ -148,7 +114,7 @@ class SignLanguageDataCollector:
 
 if __name__ == "__main__":
     # Define the actions (signs) that will be recorded
-    actions = ['t', 'u', 'v', 'w', 'x', 'y', 'z']
+    actions = ['m', 'n', 'o', 'p', 'q', 'r', 's']
     
     # Create collector instance and start data collection
     collector = SignLanguageDataCollector(actions)

@@ -30,7 +30,6 @@ class SignLanguageTranslator:
         self.keypoints_buffer = deque(maxlen=20)  # Buffer to store the last 20 frames
         self.last_prediction = None
         self.grammar_result = None
-        self.detection_area = None
         self.current_confidence = 0.0
         self.current_prediction = None
         
@@ -66,38 +65,6 @@ class SignLanguageTranslator:
         except Exception as e:
             logging.error(f"Error initializing grammar tool: {e}")
             self.tool = None
-
-    def setup_detection_area(self, frame_width: int, frame_height: int) -> None:
-        """Setup the detection area on the left side of the frame"""
-        # Position on the left side, taking up about 60% of the frame height
-        area_size = int(frame_height * 0.6)  # Larger area
-        margin = int(frame_height * 0.1)  # 10% margin from the top
-        
-        self.detection_area = {
-            'x1': 50,  # Fixed margin from left edge
-            'y1': margin,
-            'x2': 50 + area_size,  # Square area
-            'y2': margin + area_size
-        }
-
-    def draw_detection_area(self, image: np.ndarray) -> None:
-        """Draw the detection area and guidance on the image"""
-        if self.detection_area is None:
-            return
-            
-        # Draw the detection area rectangle
-        color = (0, 255, 0)  # Green color
-        thickness = 2
-        
-        cv2.rectangle(image, 
-                     (self.detection_area['x1'], self.detection_area['y1']),
-                     (self.detection_area['x2'], self.detection_area['y2']),
-                     color, thickness)
-        
-        # Add guidance text
-        cv2.putText(image, 'Perform sign here',
-                    (self.detection_area['x1'], self.detection_area['y1'] - 10),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
 
     def draw_confidence_bar(self, image: np.ndarray) -> None:
         """Draw a confidence bar showing the current prediction confidence"""
@@ -187,11 +154,6 @@ class SignLanguageTranslator:
             logging.error("Cannot access camera")
             return
             
-        # Get frame dimensions and setup detection area
-        ret, frame = cap.read()
-        if ret:
-            self.setup_detection_area(frame.shape[1], frame.shape[0])
-            
         try:
             with mp.solutions.holistic.Holistic(min_detection_confidence=0.75, min_tracking_confidence=0.75) as holistic:
                 while cap.isOpened():
@@ -199,6 +161,9 @@ class SignLanguageTranslator:
                     if not ret:
                         logging.error("Failed to grab frame")
                         continue
+                    
+                    # Flip the image horizontally before processing
+                    image = cv2.flip(image, 1)
                         
                     current_time = time.time()
                     
@@ -260,9 +225,6 @@ class SignLanguageTranslator:
                     except Exception as e:
                         logging.error(f"Error processing frame: {e}")
                         continue
-                        
-                    # Draw detection area
-                    self.draw_detection_area(image)
                     
                     # Draw confidence bar
                     self.draw_confidence_bar(image)
