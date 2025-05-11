@@ -114,7 +114,7 @@ class SignLanguageDataCollector:
 
 if __name__ == "__main__":
     # Define the actions (signs) that will be recorded
-    actions = ['m', 'n', 'o', 'p', 'q', 'r', 's']
+    actions = ["Hello", "What's up", "I'm good", "Fine", "Bad", "Great", "Nothing"]
     
     # Create collector instance and start data collection
     collector = SignLanguageDataCollector(actions)

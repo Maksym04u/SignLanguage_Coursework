@@ -167,9 +167,7 @@ class SignLanguageTranslator:
             
         # Set initial window size
         cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
-        cv2.resizeWindow(self.window_name, 1600, 900)  # Set initial size to 1080p
-        cv2.namedWindow('Recognized Text', cv2.WINDOW_NORMAL)
-        cv2.resizeWindow('Recognized Text', 800, 200)
+        cv2.resizeWindow(self.window_name, 1920, 1080)  # Wider window to accommodate split view
             
         try:
             with mp.solutions.holistic.Holistic(min_detection_confidence=0.75, min_tracking_confidence=0.75) as holistic:
@@ -181,6 +179,19 @@ class SignLanguageTranslator:
                     
                     # Flip the image horizontally before processing
                     image = cv2.flip(image, 1)
+                    
+                    # Create a blank canvas for the split view
+                    height, width = image.shape[:2]
+                    # Create a wider canvas to accommodate both views
+                    combined_width = width + 400  # Add 400 pixels for text area
+                    combined_image = np.zeros((height, combined_width, 3), dtype=np.uint8)
+                    
+                    # Place camera feed on the left side
+                    combined_image[:, :width] = image
+                    
+                    # Create text area on the right side (white background)
+                    text_area = np.ones((height, 400, 3), dtype=np.uint8) * 255
+                    combined_image[:, width:] = text_area
                         
                     current_time = time.time()
                     
@@ -207,8 +218,8 @@ class SignLanguageTranslator:
                     try:
                         results = image_process(image, holistic)
                         
-                        # Draw landmarks
-                        draw_landmarks(image, results)
+                        # Draw landmarks on the combined image (left side)
+                        draw_landmarks(combined_image[:, :width], results)
                         
                         # Check if hands are detected
                         hands_detected = results.left_hand_landmarks is not None or results.right_hand_landmarks is not None
@@ -241,7 +252,7 @@ class SignLanguageTranslator:
                         else:
                             # No hands detected, display message on screen
                             x, y = self.get_scaled_coordinates(image, 0.02, 0.35)
-                            cv2.putText(image, "No hands detected", (x, y),
+                            cv2.putText(combined_image, "No hands detected", (x, y),
                                       cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 255), 2, cv2.LINE_AA)
                                     
                     except Exception as e:
@@ -249,13 +260,13 @@ class SignLanguageTranslator:
                         continue
                     
                     # Draw confidence bar
-                    self.draw_confidence_bar(image)
+                    self.draw_confidence_bar(combined_image)
                     
                     # Display current prediction if confidence is above 0.5
                     if self.current_confidence > 0.5:
                         x, y = self.get_scaled_coordinates(image, 0.02, 0.2)
                         prediction_text = f'Detected: {self.current_prediction}'
-                        cv2.putText(image, prediction_text, (x, y),
+                        cv2.putText(combined_image, prediction_text, (x, y),
                                   cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
                     
                     # Display buffer size with color indication
@@ -266,7 +277,7 @@ class SignLanguageTranslator:
                     if buffer_size == 20:
                         color = (0, 255, 0)  # Green when full
                         x, y = self.get_scaled_coordinates(image, 0.02, 0.4)
-                        cv2.putText(image, "Buffer full - analyzing gesture", (x, y),
+                        cv2.putText(combined_image, "Buffer full - analyzing gesture", (x, y),
                                   cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, 2, cv2.LINE_AA)
                     elif buffer_size > 15:
                         color = (0, 255, 255)  # Yellow when almost full
@@ -274,13 +285,13 @@ class SignLanguageTranslator:
                         color = (255, 255, 255)  # White otherwise
                         
                     x, y = self.get_scaled_coordinates(image, 0.02, 0.25)
-                    cv2.putText(image, buffer_text, (x, y),
+                    cv2.putText(combined_image, buffer_text, (x, y),
                               cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, 1, cv2.LINE_AA)
                     
                     # Display recognition message if in progress
                     if self.recognition_in_progress:
                         x, y = self.get_scaled_coordinates(image, 0.02, 0.45)
-                        cv2.putText(image, f"Recognized: {self.last_prediction}", (x, y),
+                        cv2.putText(combined_image, f"Recognized: {self.last_prediction}", (x, y),
                                   cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 255, 0), 2, cv2.LINE_AA)
                     
                     # Display FPS
@@ -290,7 +301,7 @@ class SignLanguageTranslator:
                         self.frame_count = 0
                         fps_text = f'FPS: {fps}'
                         x, y = self.get_scaled_coordinates(image, 0.02, 0.3)
-                        cv2.putText(image, fps_text, (x, y),
+                        cv2.putText(combined_image, fps_text, (x, y),
                                   cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
                     
                     # Handle keyboard inputs
@@ -304,36 +315,83 @@ class SignLanguageTranslator:
                             cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
                         else:
                             cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
-                        
-                    # --- NEW: Display recognized text in a separate window ---
+                    
+                    # Display text in the right panel
                     text_to_display = self.grammar_result if self.grammar_result else ' '.join(self.sentence)
-                    text_window = 800
-                    text_height = 200
-                    text_img = 255 * np.ones((text_height, text_window, 3), dtype=np.uint8)
                     if text_to_display:
-                        font_scale_text = 1.5
-                        thickness = 2
-                        textsize = cv2.getTextSize(text_to_display, cv2.FONT_HERSHEY_SIMPLEX, font_scale_text, thickness)[0]
-                        text_X_coord = (text_window - textsize[0]) // 2
-                        text_Y_coord = (text_height + textsize[1]) // 2
-                        cv2.putText(text_img, text_to_display, (text_X_coord, text_Y_coord),
-                                    cv2.FONT_HERSHEY_SIMPLEX, font_scale_text, (0, 0, 0), thickness, cv2.LINE_AA)
-                    cv2.imshow('Recognized Text', text_img)
-                    # ------------------------------------------------------
+                        # Calculate maximum characters per line based on panel width
+                        max_chars_per_line = 25  # Reduced from 30 to ensure better wrapping
+                        words = text_to_display.split()
+                        lines = []
+                        current_line = []
+                        current_length = 0
+                        
+                        for word in words:
+                            # Add 1 for the space between words
+                            word_length = len(word) + (1 if current_line else 0)
+                            
+                            if current_length + word_length > max_chars_per_line:
+                                # If a single word is longer than max_chars_per_line, split it
+                                if not current_line:
+                                    # Split long word
+                                    remaining_word = word
+                                    while remaining_word:
+                                        if len(remaining_word) > max_chars_per_line:
+                                            lines.append(remaining_word[:max_chars_per_line])
+                                            remaining_word = remaining_word[max_chars_per_line:]
+                                        else:
+                                            current_line = [remaining_word]
+                                            current_length = len(remaining_word)
+                                            break
+                                else:
+                                    # Add current line and start new one
+                                    lines.append(' '.join(current_line))
+                                    current_line = [word]
+                                    current_length = len(word)
+                            else:
+                                current_line.append(word)
+                                current_length += word_length
+                        
+                        # Add the last line if it exists
+                        if current_line:
+                            lines.append(' '.join(current_line))
+                        
+                        # Display each line with proper spacing
+                        y_offset = height // 4  # Start from 1/4 of the height
+                        line_height = 40  # Reduced line height for better spacing
+                        
+                        for line in lines:
+                            # Calculate text size for proper centering
+                            textsize = cv2.getTextSize(line, cv2.FONT_HERSHEY_SIMPLEX, 0.8, 2)[0]
+                            text_x = width + (400 - textsize[0]) // 2  # Center text in the right panel
+                            
+                            # Draw text with a slight shadow for better readability
+                            cv2.putText(combined_image, line, (text_x + 1, y_offset + 1),
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.8, (100, 100, 100), 2, cv2.LINE_AA)
+                            cv2.putText(combined_image, line, (text_x, y_offset),
+                                      cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 0), 2, cv2.LINE_AA)
+                            
+                            y_offset += line_height
+                            
+                            # If we're running out of space, start from the top again
+                            if y_offset > height - 50:
+                                y_offset = height // 4
                     
                     # Display instructions
                     instructions = 'Press SPACE to reset, ENTER for grammar check, F for fullscreen'
                     x, y = self.get_scaled_coordinates(image, 0.02, 0.03)
-                    cv2.putText(image, instructions, (x, y),
+                    cv2.putText(combined_image, instructions, (x, y),
                               cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
                     
-                    # Show the image
-                    cv2.imshow(self.window_name, image)
+                    # Draw a vertical line to separate the views
+                    cv2.line(combined_image, (width, 0), (width, height), (255, 255, 255), 2)
+                    
+                    # Show the combined image
+                    cv2.imshow(self.window_name, combined_image)
                     
                     # Break loop if window is closed
                     if cv2.waitKey(1) & 0xFF == ord('q') or \
-                       cv2.getWindowProperty(self.window_name, cv2.WND_PROP_VISIBLE) < 1 or \
-                       cv2.getWindowProperty('Recognized Text', cv2.WND_PROP_VISIBLE) < 1:
+                       cv2.getWindowProperty(self.window_name, cv2.WND_PROP_VISIBLE) < 1:
                         break
                         
         except Exception as e:
