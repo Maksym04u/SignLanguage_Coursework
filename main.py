@@ -33,6 +33,10 @@ class SignLanguageTranslator:
         self.current_confidence = 0.0
         self.current_prediction = None
         
+        # Window state
+        self.is_fullscreen = False
+        self.window_name = 'Sign Language Translator'
+        
         # Performance tracking
         self.frame_count = 0
         self.last_prediction_time = 0
@@ -66,19 +70,25 @@ class SignLanguageTranslator:
             logging.error(f"Error initializing grammar tool: {e}")
             self.tool = None
 
+    def get_scaled_coordinates(self, image, x_percent, y_percent):
+        """Convert percentage-based coordinates to actual pixel coordinates"""
+        height, width = image.shape[:2]
+        return (int(width * x_percent), int(height * y_percent))
+
     def draw_confidence_bar(self, image: np.ndarray) -> None:
         """Draw a confidence bar showing the current prediction confidence"""
-        bar_width = 200
-        bar_height = 20
-        x = 20
-        y = 100
+        height, width = image.shape[:2]
+        bar_width = int(width * 0.2)  # 20% of screen width
+        bar_height = int(height * 0.02)  # 2% of screen height
+        
+        x, y = self.get_scaled_coordinates(image, 0.02, 0.1)  # 2% from left, 10% from top
         
         # Draw background bar
         cv2.rectangle(image, (x, y), (x + bar_width, y + bar_height), (128, 128, 128), -1)
         
         # Draw confidence level
         confidence_width = int(bar_width * self.current_confidence)
-        color = (0, 255, 0) if self.current_confidence >= 0.98 else (0, 165, 255)  # Green if confident, orange if not
+        color = (0, 255, 0) if self.current_confidence >= 0.98 else (0, 165, 255)
         cv2.rectangle(image, (x, y), (x + confidence_width, y + bar_height), color, -1)
         
         # Draw border
@@ -86,8 +96,9 @@ class SignLanguageTranslator:
         
         # Draw text
         confidence_text = f'Confidence: {self.current_confidence:.2%}'
-        cv2.putText(image, confidence_text, (x + 5, y + 15),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+        font_scale = width / 1000  # Scale font size based on window width
+        cv2.putText(image, confidence_text, (x + 5, y + int(bar_height * 0.75)),
+                    cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
             
     def process_prediction(self, prediction: np.ndarray) -> str:
         """Process model prediction and return the predicted sign"""
@@ -154,6 +165,12 @@ class SignLanguageTranslator:
             logging.error("Cannot access camera")
             return
             
+        # Set initial window size
+        cv2.namedWindow(self.window_name, cv2.WINDOW_NORMAL)
+        cv2.resizeWindow(self.window_name, 1600, 900)  # Set initial size to 1080p
+        cv2.namedWindow('Recognized Text', cv2.WINDOW_NORMAL)
+        cv2.resizeWindow('Recognized Text', 800, 200)
+            
         try:
             with mp.solutions.holistic.Holistic(min_detection_confidence=0.75, min_tracking_confidence=0.75) as holistic:
                 while cap.isOpened():
@@ -166,6 +183,10 @@ class SignLanguageTranslator:
                     image = cv2.flip(image, 1)
                         
                     current_time = time.time()
+                    
+                    # Get current window size
+                    height, width = image.shape[:2]
+                    font_scale = width / 1000  # Scale font size based on window width
                     
                     # Check if recognition message should be hidden
                     if self.recognition_in_progress and (current_time - self.recognition_start_time) > self.recognition_duration:
@@ -219,8 +240,9 @@ class SignLanguageTranslator:
                                         self.update_sentence(predicted_sign)
                         else:
                             # No hands detected, display message on screen
-                            cv2.putText(image, "No hands detected", (20, 350),
-                                      cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 0, 255), 2, cv2.LINE_AA)
+                            x, y = self.get_scaled_coordinates(image, 0.02, 0.35)
+                            cv2.putText(image, "No hands detected", (x, y),
+                                      cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 0, 255), 2, cv2.LINE_AA)
                                     
                     except Exception as e:
                         logging.error(f"Error processing frame: {e}")
@@ -231,9 +253,10 @@ class SignLanguageTranslator:
                     
                     # Display current prediction if confidence is above 0.5
                     if self.current_confidence > 0.5:
+                        x, y = self.get_scaled_coordinates(image, 0.02, 0.2)
                         prediction_text = f'Detected: {self.current_prediction}'
-                        cv2.putText(image, prediction_text, (20, 200),
-                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+                        cv2.putText(image, prediction_text, (x, y),
+                                  cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
                     
                     # Display buffer size with color indication
                     buffer_size = len(self.keypoints_buffer)
@@ -242,20 +265,23 @@ class SignLanguageTranslator:
                     # Change color based on buffer status
                     if buffer_size == 20:
                         color = (0, 255, 0)  # Green when full
-                        cv2.putText(image, "Buffer full - analyzing gesture", (20, 400),
-                                  cv2.FONT_HERSHEY_SIMPLEX, 0.7, color, 2, cv2.LINE_AA)
+                        x, y = self.get_scaled_coordinates(image, 0.02, 0.4)
+                        cv2.putText(image, "Buffer full - analyzing gesture", (x, y),
+                                  cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, 2, cv2.LINE_AA)
                     elif buffer_size > 15:
                         color = (0, 255, 255)  # Yellow when almost full
                     else:
                         color = (255, 255, 255)  # White otherwise
                         
-                    cv2.putText(image, buffer_text, (20, 250),
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, color, 1, cv2.LINE_AA)
+                    x, y = self.get_scaled_coordinates(image, 0.02, 0.25)
+                    cv2.putText(image, buffer_text, (x, y),
+                              cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, 1, cv2.LINE_AA)
                     
                     # Display recognition message if in progress
                     if self.recognition_in_progress:
-                        cv2.putText(image, f"Recognized: {self.last_prediction}", (20, 450),
-                                  cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2, cv2.LINE_AA)
+                        x, y = self.get_scaled_coordinates(image, 0.02, 0.45)
+                        cv2.putText(image, f"Recognized: {self.last_prediction}", (x, y),
+                                  cv2.FONT_HERSHEY_SIMPLEX, font_scale, (0, 255, 0), 2, cv2.LINE_AA)
                     
                     # Display FPS
                     self.frame_count += 1
@@ -263,33 +289,51 @@ class SignLanguageTranslator:
                         fps = self.frame_count
                         self.frame_count = 0
                         fps_text = f'FPS: {fps}'
-                        cv2.putText(image, fps_text, (20, 300),
-                                  cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+                        x, y = self.get_scaled_coordinates(image, 0.02, 0.3)
+                        cv2.putText(image, fps_text, (x, y),
+                                  cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
                     
                     # Handle keyboard inputs
                     if keyboard.is_pressed(' '):
                         self.reset()
                     elif keyboard.is_pressed('enter'):
                         self.check_grammar()
+                    elif keyboard.is_pressed('f'):  # Toggle fullscreen
+                        self.is_fullscreen = not self.is_fullscreen
+                        if self.is_fullscreen:
+                            cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_FULLSCREEN)
+                        else:
+                            cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
                         
-                    # Display current sentence or grammar result
+                    # --- NEW: Display recognized text in a separate window ---
                     text_to_display = self.grammar_result if self.grammar_result else ' '.join(self.sentence)
+                    text_window = 800
+                    text_height = 200
+                    text_img = 255 * np.ones((text_height, text_window, 3), dtype=np.uint8)
                     if text_to_display:
-                        textsize = cv2.getTextSize(text_to_display, cv2.FONT_HERSHEY_SIMPLEX, 1, 2)[0]
-                        text_X_coord = (image.shape[1] - textsize[0]) // 2
-                        cv2.putText(image, text_to_display, (text_X_coord, 470),
-                                  cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 255, 255), 2, cv2.LINE_AA)
+                        font_scale_text = 1.5
+                        thickness = 2
+                        textsize = cv2.getTextSize(text_to_display, cv2.FONT_HERSHEY_SIMPLEX, font_scale_text, thickness)[0]
+                        text_X_coord = (text_window - textsize[0]) // 2
+                        text_Y_coord = (text_height + textsize[1]) // 2
+                        cv2.putText(text_img, text_to_display, (text_X_coord, text_Y_coord),
+                                    cv2.FONT_HERSHEY_SIMPLEX, font_scale_text, (0, 0, 0), thickness, cv2.LINE_AA)
+                    cv2.imshow('Recognized Text', text_img)
+                    # ------------------------------------------------------
                     
                     # Display instructions
-                    cv2.putText(image, 'Press SPACE to reset, ENTER for grammar check', (20, 30),
-                              cv2.FONT_HERSHEY_SIMPLEX, 0.5, (255, 255, 255), 1, cv2.LINE_AA)
+                    instructions = 'Press SPACE to reset, ENTER for grammar check, F for fullscreen'
+                    x, y = self.get_scaled_coordinates(image, 0.02, 0.03)
+                    cv2.putText(image, instructions, (x, y),
+                              cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
                     
                     # Show the image
-                    cv2.imshow('Camera', image)
+                    cv2.imshow(self.window_name, image)
                     
                     # Break loop if window is closed
                     if cv2.waitKey(1) & 0xFF == ord('q') or \
-                       cv2.getWindowProperty('Camera', cv2.WND_PROP_VISIBLE) < 1:
+                       cv2.getWindowProperty(self.window_name, cv2.WND_PROP_VISIBLE) < 1 or \
+                       cv2.getWindowProperty('Recognized Text', cv2.WND_PROP_VISIBLE) < 1:
                         break
                         
         except Exception as e:
