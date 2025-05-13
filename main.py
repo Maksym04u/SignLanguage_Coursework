@@ -32,6 +32,7 @@ class SignLanguageTranslator:
         self.grammar_result = None
         self.current_confidence = 0.0
         self.current_prediction = None
+        self.capitalize_next = False  # Flag to track if next letter should be capitalized
         
         # Window state
         self.is_fullscreen = False
@@ -52,7 +53,7 @@ class SignLanguageTranslator:
         self.recognition_duration = 1.0  # Duration to show recognition message
         
         # Buffer reset delay
-        self.buffer_reset_delay = 0.75  # Wait 0.5 seconds before resetting buffer after recognition
+        self.buffer_reset_delay = 0.75  # Wait 0.75 seconds before resetting buffer after recognition
         self.buffer_reset_time = 0  # Time when buffer should be reset
         
         # Load model with error handling
@@ -108,14 +109,23 @@ class SignLanguageTranslator:
         # Check if we have a high confidence prediction (threshold at 98%)
         if self.current_confidence >= 0.98:
             # Only return the prediction if it's different from the last one
-            if self.last_prediction != self.current_prediction:
+            if (self.last_prediction != self.current_prediction or self.current_prediction not in string.ascii_lowercase or self.current_prediction not in string.ascii_uppercase):
                 return self.current_prediction
                 
         return None
         
     def update_sentence(self, new_sign: str) -> None:
         """Update the sentence with the new sign"""
-        if new_sign and (not self.last_prediction or self.last_prediction != new_sign):
+        if new_sign:
+            # Only check for duplicates if the last prediction exists and is not a letter
+            if self.last_prediction and new_sign == self.last_prediction and \
+               not (new_sign in string.ascii_lowercase or new_sign in string.ascii_uppercase):
+                return
+                
+            # Convert letter to lowercase by default
+            if new_sign in string.ascii_uppercase:
+                new_sign = new_sign.lower()
+                
             self.sentence.append(new_sign)
             self.last_prediction = new_sign
             
@@ -123,26 +133,35 @@ class SignLanguageTranslator:
             if len(self.sentence) == 1:
                 self.sentence[0] = self.sentence[0].capitalize()
                 
-            # Combine consecutive letters into words
+            # Combine consecutive letters into words without spaces
             if len(self.sentence) >= 2:
                 if (self.sentence[-1] in string.ascii_lowercase or self.sentence[-1] in string.ascii_uppercase) and \
                    (self.sentence[-2] in string.ascii_lowercase or self.sentence[-2] in string.ascii_uppercase):
                     self.sentence[-1] = self.sentence[-2] + self.sentence[-1]
                     self.sentence.pop(-2)
-                    self.sentence[-1] = self.sentence[-1].capitalize()
             
-            # Schedule buffer reset after delay
+            # Clear buffer immediately after recognizing any gesture
+            self.keypoints_buffer.clear()
+            # Set delay for next recognition
             self.buffer_reset_time = time.time() + self.buffer_reset_delay
-            logging.info(f"Scheduled buffer reset in {self.buffer_reset_delay} seconds after recognizing: {new_sign}")
+            logging.info(f"Buffer cleared and next recognition scheduled in {self.buffer_reset_delay} seconds after recognizing: {new_sign}")
             
             # Set recognition state
             self.recognition_in_progress = True
             self.recognition_start_time = time.time()
-                    
+            
+    def add_space(self) -> None:
+        """Add a space to the current sentence and capitalize the next letter"""
+        if self.sentence:
+            self.sentence.append(" ")
+            logging.info("Space added to sentence")
+            # Set a flag to capitalize the next letter
+            self.capitalize_next = True
+            
     def check_grammar(self) -> None:
         """Check and correct grammar of the current sentence"""
         if self.tool and self.sentence:
-            text = ' '.join(self.sentence)
+            text = ''.join(self.sentence)  # Join without spaces
             self.grammar_result = self.tool.correct(text)
             
     def reset(self) -> None:
@@ -232,23 +251,25 @@ class SignLanguageTranslator:
                                 # Update the last landmark time
                                 self.last_landmark_time = current_time
                                 
-                                # Add to the buffer (automatically maintains maxlen=20)
-                                self.keypoints_buffer.append(keypoints)
-                                
-                                # Process when we have enough frames (20 frames = ~1.6 seconds)
-                                # and enough time has passed since the last prediction
-                                if len(self.keypoints_buffer) == 20 and (current_time - self.last_prediction_time) >= self.prediction_interval:
-                                    # Convert buffer to numpy array
-                                    keypoints_array = np.array(list(self.keypoints_buffer))
+                                # Only add to buffer if we're not in the reset delay period
+                                if self.buffer_reset_time == 0:
+                                    # Add to the buffer (automatically maintains maxlen=20)
+                                    self.keypoints_buffer.append(keypoints)
                                     
-                                    # Make prediction
-                                    prediction = self.model.predict(keypoints_array[np.newaxis, :, :], verbose=0)
-                                    self.last_prediction_time = current_time
-                                    
-                                    # Process prediction
-                                    predicted_sign = self.process_prediction(prediction)
-                                    if predicted_sign:
-                                        self.update_sentence(predicted_sign)
+                                    # Process when we have enough frames (20 frames = ~1.6 seconds)
+                                    # and enough time has passed since the last prediction
+                                    if len(self.keypoints_buffer) == 20 and (current_time - self.last_prediction_time) >= self.prediction_interval:
+                                        # Convert buffer to numpy array
+                                        keypoints_array = np.array(list(self.keypoints_buffer))
+                                        
+                                        # Make prediction
+                                        prediction = self.model.predict(keypoints_array[np.newaxis, :, :], verbose=0)
+                                        self.last_prediction_time = current_time
+                                        
+                                        # Process prediction
+                                        predicted_sign = self.process_prediction(prediction)
+                                        if predicted_sign:
+                                            self.update_sentence(predicted_sign)
                         else:
                             # No hands detected, display message on screen
                             x, y = self.get_scaled_coordinates(image, 0.02, 0.35)
@@ -306,6 +327,8 @@ class SignLanguageTranslator:
                     
                     # Handle keyboard inputs
                     if keyboard.is_pressed(' '):
+                        self.add_space()  # Add space instead of resetting
+                    elif keyboard.is_pressed('r'):  # Use 'r' for reset
                         self.reset()
                     elif keyboard.is_pressed('enter'):
                         self.check_grammar()
@@ -317,44 +340,15 @@ class SignLanguageTranslator:
                             cv2.setWindowProperty(self.window_name, cv2.WND_PROP_FULLSCREEN, cv2.WINDOW_NORMAL)
                     
                     # Display text in the right panel
-                    text_to_display = self.grammar_result if self.grammar_result else ' '.join(self.sentence)
+                    text_to_display = self.grammar_result if self.grammar_result else ''.join(self.sentence)  # Join without spaces
                     if text_to_display:
                         # Calculate maximum characters per line based on panel width
                         max_chars_per_line = 25  # Reduced from 30 to ensure better wrapping
-                        words = text_to_display.split()
+                        
+                        # Split text into lines without considering spaces
                         lines = []
-                        current_line = []
-                        current_length = 0
-                        
-                        for word in words:
-                            # Add 1 for the space between words
-                            word_length = len(word) + (1 if current_line else 0)
-                            
-                            if current_length + word_length > max_chars_per_line:
-                                # If a single word is longer than max_chars_per_line, split it
-                                if not current_line:
-                                    # Split long word
-                                    remaining_word = word
-                                    while remaining_word:
-                                        if len(remaining_word) > max_chars_per_line:
-                                            lines.append(remaining_word[:max_chars_per_line])
-                                            remaining_word = remaining_word[max_chars_per_line:]
-                                        else:
-                                            current_line = [remaining_word]
-                                            current_length = len(remaining_word)
-                                            break
-                                else:
-                                    # Add current line and start new one
-                                    lines.append(' '.join(current_line))
-                                    current_line = [word]
-                                    current_length = len(word)
-                            else:
-                                current_line.append(word)
-                                current_length += word_length
-                        
-                        # Add the last line if it exists
-                        if current_line:
-                            lines.append(' '.join(current_line))
+                        for i in range(0, len(text_to_display), max_chars_per_line):
+                            lines.append(text_to_display[i:i + max_chars_per_line])
                         
                         # Display each line with proper spacing
                         y_offset = height // 4  # Start from 1/4 of the height
@@ -378,7 +372,7 @@ class SignLanguageTranslator:
                                 y_offset = height // 4
                     
                     # Display instructions
-                    instructions = 'Press SPACE to reset, ENTER for grammar check, F for fullscreen'
+                    instructions = 'Press SPACE to add space, R to reset, ENTER for grammar check, F for fullscreen'
                     x, y = self.get_scaled_coordinates(image, 0.02, 0.03)
                     cv2.putText(combined_image, instructions, (x, y),
                               cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
