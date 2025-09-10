@@ -43,7 +43,7 @@ X, Y = np.array(landmarks), to_categorical(labels).astype(int)
 # Split the data into training and testing sets
 X_train, X_test, Y_train, Y_test = train_test_split(X, Y, test_size=0.15, random_state=34, stratify=Y)
 
-# Define the enhanced model architecture with GRU layers and attention
+
 def create_model(input_shape, num_classes):
     # Input layer
     inputs = Input(shape=input_shape)
@@ -114,7 +114,7 @@ history = model.fit(
 )
 
 # Save the trained model
-model.save('my_model.h5')
+model.save('my_model')
 
 # Make predictions on the test set
 predictions = np.argmax(model.predict(X_test), axis=1)

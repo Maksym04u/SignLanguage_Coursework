@@ -41,7 +41,7 @@ class SignLanguageTranslator:
         # Performance tracking
         self.frame_count = 0
         self.last_prediction_time = 0
-        self.prediction_interval = 0.7  # Make predictions every 0.5 seconds
+        self.prediction_interval = 0.7
         
         # Buffer reset mechanism
         self.last_landmark_time = 0
@@ -79,8 +79,8 @@ class SignLanguageTranslator:
     def draw_confidence_bar(self, image: np.ndarray) -> None:
         """Draw a confidence bar showing the current prediction confidence"""
         height, width = image.shape[:2]
-        bar_width = int(width * 0.2)  # 20% of screen width
-        bar_height = int(height * 0.02)  # 2% of screen height
+        bar_width = int(width * 0.2)
+        bar_height = int(height * 0.02)
         
         x, y = self.get_scaled_coordinates(image, 0.02, 0.1)  # 2% from left, 10% from top
         
@@ -372,7 +372,7 @@ class SignLanguageTranslator:
                                 y_offset = height // 4
                     
                     # Display instructions
-                    instructions = 'Press SPACE to add space, R to reset, ENTER for grammar check, F for fullscreen'
+                    instructions = 'Press SPACE to add space, R to reset, F for fullscreen'
                     x, y = self.get_scaled_coordinates(image, 0.02, 0.03)
                     cv2.putText(combined_image, instructions, (x, y),
                               cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
