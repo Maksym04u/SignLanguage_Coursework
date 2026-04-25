@@ -28,6 +28,7 @@ label_map = {label:num for num, label in enumerate(actions)}
 # Initialize empty lists to store landmarks and labels
 landmarks, labels = [], []
 
+print("landmarks: ", landmarks, "labels: ", labels)
 # Iterate over actions and sequences to load landmarks and corresponding labels
 for action, sequence in product(actions, range(sequences)):
     temp = []
