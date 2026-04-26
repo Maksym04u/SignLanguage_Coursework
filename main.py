@@ -13,6 +13,7 @@ import language_tool_python
 import time
 import logging
 from collections import deque
+from label_registry import load_labels, class_to_display
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -22,8 +23,9 @@ class SignLanguageTranslator:
         # Set the path to the data directory
         self.PATH = os.path.join('data')
         
-        # Create an array of action labels
-        self.actions = np.array(os.listdir(self.PATH))
+        labels = load_labels()
+        self.actions = np.array([entry.class_id for entry in labels])
+        self.class_display = class_to_display(labels)
         
         # Initialize lists
         self.sentence = []
@@ -66,7 +68,8 @@ class SignLanguageTranslator:
             
         # Initialize grammar tool
         try:
-            self.tool = language_tool_python.LanguageToolPublicAPI('en-UK')
+            tool_code = os.getenv("GRAMMAR_LANG", "en-UK")
+            self.tool = language_tool_python.LanguageToolPublicAPI(tool_code)
         except Exception as e:
             logging.error(f"Error initializing grammar tool: {e}")
             self.tool = None
@@ -104,7 +107,8 @@ class SignLanguageTranslator:
     def process_prediction(self, prediction: np.ndarray) -> str:
         """Process model prediction and return the predicted sign"""
         self.current_confidence = np.amax(prediction)
-        self.current_prediction = self.actions[np.argmax(prediction)]
+        predicted_class = self.actions[np.argmax(prediction)]
+        self.current_prediction = self.class_display.get(predicted_class, predicted_class)
         
         # Check if we have a high confidence prediction (threshold at 98%)
         if self.current_confidence >= 0.98:
@@ -286,7 +290,7 @@ class SignLanguageTranslator:
                     # Display current prediction if confidence is above 0.5
                     if self.current_confidence > 0.5:
                         x, y = self.get_scaled_coordinates(image, 0.02, 0.2)
-                        prediction_text = f'Detected: {self.current_prediction}'
+                        prediction_text = f"Detected: {self.current_prediction}"
                         cv2.putText(combined_image, prediction_text, (x, y),
                                   cv2.FONT_HERSHEY_SIMPLEX, font_scale, (255, 255, 255), 1, cv2.LINE_AA)
                     

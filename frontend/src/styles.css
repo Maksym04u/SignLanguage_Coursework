@@ -1,0 +1,472 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: Arial, sans-serif;
+  background: #f3f4f6;
+  color: #111827;
+}
+
+.container {
+  max-width: 900px;
+  margin: 0 auto;
+  padding: 20px;
+  position: relative;
+}
+
+.card {
+  background: white;
+  border-radius: 10px;
+  padding: 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 3px 10px rgba(0, 0, 0, 0.08);
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.cardStack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fieldStack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+  min-width: 0;
+}
+
+input,
+select {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 10px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+}
+
+button {
+  border: none;
+  border-radius: 8px;
+  padding: 10px 12px;
+  cursor: pointer;
+  background: #2563eb;
+  color: white;
+}
+
+.topBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 12px;
+}
+
+.topBarLeft {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  min-width: 0;
+  flex: 1;
+}
+
+.userEmail {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #1d4ed8;
+  letter-spacing: 0.01em;
+}
+
+.topBarTitles h1 {
+  margin: 0 0 4px 0;
+  font-size: 1.5rem;
+}
+
+.topBarTitles p {
+  margin: 0;
+  color: #4b5563;
+  font-size: 0.95rem;
+}
+
+.logoutBtn {
+  flex-shrink: 0;
+  margin-top: 4px;
+  background: #111827;
+}
+
+.secondaryBtn {
+  background: #6b7280;
+}
+
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 4px;
+  min-width: 0;
+}
+
+.modalActions {
+  margin-top: 12px;
+}
+
+.historyItem {
+  display: grid;
+  grid-template-columns: 60px 1fr 1fr minmax(0, 180px);
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid #e5e7eb;
+  min-width: 0;
+}
+
+.inlineMessage {
+  padding: 10px 12px;
+  border-radius: 8px;
+  font-size: 0.9rem;
+  line-height: 1.35;
+  word-break: break-word;
+}
+
+.inlineError {
+  background: #fef2f2;
+  color: #991b1b;
+  border: 1px solid #fecaca;
+}
+
+.inlineNotice {
+  background: #ecfdf5;
+  color: #065f46;
+  border: 1px solid #a7f3d0;
+}
+
+.authOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.55);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  padding: 16px;
+}
+
+.authModal {
+  width: min(420px, calc(100vw - 32px));
+  max-width: 100%;
+  background: #ffffff;
+  border-radius: 12px;
+  padding: 18px;
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25);
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.authModal h2 {
+  margin: 0 0 8px 0;
+}
+
+.authModal > p {
+  margin: 0 0 12px 0;
+  color: #4b5563;
+  font-size: 0.95rem;
+}
+
+.spaceBetween {
+  justify-content: space-between;
+  align-items: center;
+}
+
+.liveStreamWrap {
+  position: relative;
+  width: 100%;
+  background: #0f172a;
+  border-radius: 10px;
+  overflow: hidden;
+  aspect-ratio: 4 / 3;
+}
+
+.liveVideoHidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.liveCanvas {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #0f172a;
+}
+
+.recognizedFlash {
+  position: absolute;
+  top: 12px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(16, 185, 129, 0.9);
+  color: white;
+  padding: 6px 14px;
+  border-radius: 999px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  pointer-events: none;
+  animation: flashPop 0.25s ease-out;
+}
+
+@keyframes flashPop {
+  from {
+    transform: translateX(-50%) scale(0.85);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(-50%) scale(1);
+    opacity: 1;
+  }
+}
+
+.liveStatusGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.liveStatusItem {
+  display: flex;
+  flex-direction: column;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 8px;
+  padding: 8px 10px;
+  font-size: 0.9rem;
+  min-width: 0;
+}
+
+.liveStatusLabel {
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #6b7280;
+  margin-bottom: 2px;
+}
+
+.confidenceBar {
+  position: relative;
+  height: 22px;
+  background: #e5e7eb;
+  border-radius: 999px;
+  overflow: hidden;
+  margin-top: 6px;
+}
+
+.confidenceFill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  background: #f59e0b;
+  border-radius: 999px;
+  transition: width 0.18s ease, background 0.18s ease;
+}
+
+.confidenceText {
+  position: relative;
+  display: block;
+  text-align: center;
+  line-height: 22px;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: #111827;
+  mix-blend-mode: difference;
+  filter: invert(1);
+}
+
+.liveMainLayout {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(280px, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.liveSidePanel {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.sentencePanel {
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-top: 6px;
+}
+
+.sentencePanel h3 {
+  margin: 0 0 6px 0;
+  font-size: 0.95rem;
+  color: #4b5563;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.sentenceText {
+  margin: 0;
+  font-size: 1.15rem;
+  line-height: 1.5;
+  word-break: break-word;
+  min-height: 1.5em;
+}
+
+@media (max-width: 900px) {
+  .liveMainLayout {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* --- Text-to-Gestures panel --- */
+
+.cardSubtitle {
+  margin: 0 0 10px 0;
+  color: #4b5563;
+  font-size: 0.92rem;
+  line-height: 1.4;
+}
+
+.textToSignInput {
+  width: 100%;
+  max-width: 100%;
+  margin-top: 4px;
+  padding: 10px 12px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 1rem;
+  resize: vertical;
+  min-height: 70px;
+  background: #ffffff;
+}
+
+.textToSignInput:focus {
+  outline: 2px solid #2563eb;
+  outline-offset: 2px;
+}
+
+.textToSignSummary {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 10px;
+  font-size: 0.9rem;
+  color: #4b5563;
+}
+
+.textToSignMissing {
+  color: #b91c1c;
+  font-weight: 600;
+}
+
+.gestureStrip {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+  padding: 10px;
+  background: #0f172a;
+  border-radius: 10px;
+  align-items: flex-start;
+}
+
+.gestureCard {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  padding: 6px;
+  background: #1e293b;
+  border-radius: 8px;
+  width: 172px;
+  position: relative;
+}
+
+.gestureCardSpace {
+  width: 36px;
+  background: transparent;
+  align-self: stretch;
+  justify-content: center;
+}
+
+.gestureSpaceBar {
+  width: 4px;
+  height: 60%;
+  background: rgba(148, 163, 184, 0.55);
+  border-radius: 999px;
+}
+
+.gestureCardMissing {
+  background: #3f1d1d;
+}
+
+.gestureCanvas {
+  width: 160px;
+  height: 160px;
+  border-radius: 6px;
+  background: #0f172a;
+}
+
+.gestureCardLabel {
+  font-size: 0.95rem;
+  font-weight: 600;
+  color: #e2e8f0;
+  word-break: break-word;
+  text-align: center;
+}
+
+.gestureCardLabelMuted {
+  color: #94a3b8;
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.gestureCardBadge {
+  position: absolute;
+  top: 8px;
+  left: 8px;
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 999px;
+  color: white;
+}
+
+.gestureCardBadgeWord {
+  background: rgba(16, 185, 129, 0.85);
+}
+
+.gestureCardBadgeLetter {
+  background: rgba(59, 130, 246, 0.85);
+}
+
+.gestureCardBadgeMissing {
+  background: rgba(239, 68, 68, 0.85);
+}

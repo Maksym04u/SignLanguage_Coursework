@@ -10,6 +10,8 @@ from my_functions import *
 import logging
 import time
 from typing import List
+from label_registry import load_labels, class_ids
+from dataset.build_gesture_lexicon import update_lexicon_for_data_dir
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -43,7 +45,11 @@ class SignLanguageDataCollector:
     def collect_data(self) -> None:
         """Data collection loop with improved interface"""
         cap = self.initialize_camera()
-        
+        # Track which actions had at least one new sequence collected so we
+        # can refresh the gesture lexicon ("perfect example" DB) for them
+        # exactly once at the end of the session.
+        actions_with_new_data: set[str] = set()
+
         try:
             with mp.solutions.holistic.Holistic(min_detection_confidence=0.75, min_tracking_confidence=0.75) as holistic:
                 for action, sequence in product(self.actions, range(self.sequences)):
@@ -103,7 +109,8 @@ class SignLanguageDataCollector:
                         cv2.waitKey(1)
                         
                     print("Sequence completed")
-                    
+                    actions_with_new_data.add(str(action))
+
         except KeyboardInterrupt:
             print("\nData collection interrupted by user")
         except Exception as e:
@@ -111,11 +118,17 @@ class SignLanguageDataCollector:
         finally:
             cap.release()
             cv2.destroyAllWindows()
+            # Best-effort refresh of the gesture lexicon so reverse-translation
+            # always has a canonical pose for every newly-recorded class.
+            for data_dir in sorted(actions_with_new_data):
+                try:
+                    if update_lexicon_for_data_dir(data_dir):
+                        logging.info("Refreshed gesture lexicon for %s", data_dir)
+                except Exception:
+                    logging.exception("Failed to refresh gesture lexicon for %s", data_dir)
 
 if __name__ == "__main__":
-    # Define the actions (signs) that will be recorded
-    actions = ["wonderful"]
-    
-    # Create collector instance and start data collection
+    # Collect for any classes defined in dataset/labels.json.
+    actions = class_ids(load_labels())
     collector = SignLanguageDataCollector(actions)
     collector.collect_data()

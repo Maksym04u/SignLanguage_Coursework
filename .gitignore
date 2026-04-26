@@ -3,3 +3,5 @@ data/
 img/
 my_model.h5
 __pycache__/
+.env
+node_modules/

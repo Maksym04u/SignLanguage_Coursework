@@ -1,0 +1,7 @@
+{
+  "version": 1,
+  "description": "Reserved for reproducible train/val/test sample splits. Empty means fallback to seeded stratified split.",
+  "train": [],
+  "val": [],
+  "test": []
+}
