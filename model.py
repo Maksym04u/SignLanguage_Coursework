@@ -19,12 +19,28 @@ from keras._tf_keras.keras.utils import to_categorical
 from sklearn import metrics
 from sklearn.model_selection import train_test_split
 
-from label_registry import class_to_data_dir, load_labels
+from label_registry import (
+    DEFAULT_FRAMES,
+    DEFAULT_SEQUENCES,
+    LabelEntry,
+    class_to_data_dir,
+    labels_with_complete_data,
+    load_labels,
+)
 
 PATH = os.path.join("data")
-SEQUENCES = 30
-FRAMES = 20
+SEQUENCES = DEFAULT_SEQUENCES
+FRAMES = DEFAULT_FRAMES
 SPLITS_PATH = "dataset/splits.json"
+
+
+def labels_with_data(labels_meta: list[LabelEntry]) -> list[LabelEntry]:
+    """Keep only classes that have been fully recorded under data/<data_dir>/."""
+    ready = labels_with_complete_data(labels_meta)
+    skipped = len(labels_meta) - len(ready)
+    if skipped:
+        print(f"Skipping {skipped} label(s) with no or incomplete data.")
+    return ready
 
 
 def create_model(input_shape, num_classes):
@@ -48,7 +64,9 @@ def create_model(input_shape, num_classes):
 
 
 def load_dataset():
-    labels_meta = load_labels()
+    labels_meta = labels_with_data(load_labels())
+    if not labels_meta:
+        raise RuntimeError("No classes with complete training data found under data/.")
     actions = np.array([label.class_id for label in labels_meta])
     class_dir_map = class_to_data_dir(labels_meta)
     label_map = {label: num for num, label in enumerate(actions)}

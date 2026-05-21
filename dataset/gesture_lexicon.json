@@ -6,7 +6,7 @@
       "language": "en",
       "gloss": "a",
       "display_text": "a",
-      "data_dir": "a",
+      "data_dir": "en_letter_a",
       "lh": [
         0.0,
         0.0,
@@ -157,7 +157,7 @@
       "language": "en",
       "gloss": "age",
       "display_text": "Age",
-      "data_dir": "Age",
+      "data_dir": "en_word_age",
       "lh": [
         0.0,
         0.0,
@@ -308,7 +308,7 @@
       "language": "en",
       "gloss": "b",
       "display_text": "b",
-      "data_dir": "b",
+      "data_dir": "en_letter_b",
       "lh": [
         0.0,
         0.0,
@@ -459,7 +459,7 @@
       "language": "en",
       "gloss": "bad",
       "display_text": "Bad",
-      "data_dir": "Bad",
+      "data_dir": "en_word_bad",
       "lh": [
         0.0,
         0.0,
@@ -610,7 +610,7 @@
       "language": "en",
       "gloss": "busy",
       "display_text": "Busy",
-      "data_dir": "Busy",
+      "data_dir": "en_word_busy",
       "lh": [
         0.0,
         0.0,
@@ -761,7 +761,7 @@
       "language": "en",
       "gloss": "c",
       "display_text": "c",
-      "data_dir": "c",
+      "data_dir": "en_letter_c",
       "lh": [
         0.0,
         0.0,
@@ -912,7 +912,7 @@
       "language": "en",
       "gloss": "d",
       "display_text": "d",
-      "data_dir": "d",
+      "data_dir": "en_letter_d",
       "lh": [
         0.0,
         0.0,
@@ -1063,7 +1063,7 @@
       "language": "en",
       "gloss": "e",
       "display_text": "e",
-      "data_dir": "e",
+      "data_dir": "en_letter_e",
       "lh": [
         0.0,
         0.0,
@@ -1214,7 +1214,7 @@
       "language": "en",
       "gloss": "f",
       "display_text": "f",
-      "data_dir": "f",
+      "data_dir": "en_letter_f",
       "lh": [
         0.0,
         0.0,
@@ -1365,7 +1365,7 @@
       "language": "en",
       "gloss": "fine",
       "display_text": "Fine",
-      "data_dir": "Fine",
+      "data_dir": "en_word_fine",
       "lh": [
         0.0,
         0.0,
@@ -1516,7 +1516,7 @@
       "language": "en",
       "gloss": "g",
       "display_text": "g",
-      "data_dir": "g",
+      "data_dir": "en_letter_g",
       "lh": [
         0.0,
         0.0,
@@ -1667,7 +1667,7 @@
       "language": "en",
       "gloss": "great",
       "display_text": "Great",
-      "data_dir": "Great",
+      "data_dir": "en_word_great",
       "lh": [
         0.0,
         0.0,
@@ -1818,7 +1818,7 @@
       "language": "en",
       "gloss": "h",
       "display_text": "h",
-      "data_dir": "h",
+      "data_dir": "en_letter_h",
       "lh": [
         0.0,
         0.0,
@@ -1969,7 +1969,7 @@
       "language": "en",
       "gloss": "hello",
       "display_text": "Hello",
-      "data_dir": "Hello",
+      "data_dir": "en_word_hello",
       "lh": [
         0.0,
         0.0,
@@ -2120,7 +2120,7 @@
       "language": "en",
       "gloss": "i",
       "display_text": "i",
-      "data_dir": "i",
+      "data_dir": "en_letter_i",
       "lh": [
         0.0,
         0.0,
@@ -2271,7 +2271,7 @@
       "language": "en",
       "gloss": "im_good",
       "display_text": "I'm good",
-      "data_dir": "I'm good",
+      "data_dir": "en_word_im_good",
       "lh": [
         0.0,
         0.0,
@@ -2422,7 +2422,7 @@
       "language": "en",
       "gloss": "j",
       "display_text": "j",
-      "data_dir": "j",
+      "data_dir": "en_letter_j",
       "lh": [
         0.0,
         0.0,
@@ -2573,7 +2573,7 @@
       "language": "en",
       "gloss": "k",
       "display_text": "k",
-      "data_dir": "k",
+      "data_dir": "en_letter_k",
       "lh": [
         0.0,
         0.0,
@@ -2724,7 +2724,7 @@
       "language": "en",
       "gloss": "l",
       "display_text": "l",
-      "data_dir": "l",
+      "data_dir": "en_letter_l",
       "lh": [
         0.0,
         0.0,
@@ -2875,7 +2875,7 @@
       "language": "en",
       "gloss": "m",
       "display_text": "m",
-      "data_dir": "m",
+      "data_dir": "en_letter_m",
       "lh": [
         0.0,
         0.0,
@@ -3026,7 +3026,7 @@
       "language": "en",
       "gloss": "n",
       "display_text": "n",
-      "data_dir": "n",
+      "data_dir": "en_letter_n",
       "lh": [
         0.0,
         0.0,
@@ -3177,7 +3177,7 @@
       "language": "en",
       "gloss": "name",
       "display_text": "Name",
-      "data_dir": "Name",
+      "data_dir": "en_word_name",
       "lh": [
         0.0,
         0.0,
@@ -3328,7 +3328,7 @@
       "language": "en",
       "gloss": "nothing",
       "display_text": "Nothing",
-      "data_dir": "Nothing",
+      "data_dir": "en_word_nothing",
       "lh": [
         0.0,
         0.0,
@@ -3479,7 +3479,7 @@
       "language": "en",
       "gloss": "o",
       "display_text": "o",
-      "data_dir": "o",
+      "data_dir": "en_letter_o",
       "lh": [
         0.0,
         0.0,
@@ -3630,7 +3630,7 @@
       "language": "en",
       "gloss": "p",
       "display_text": "p",
-      "data_dir": "p",
+      "data_dir": "en_letter_p",
       "lh": [
         0.0,
         0.0,
@@ -3781,7 +3781,7 @@
       "language": "en",
       "gloss": "q",
       "display_text": "q",
-      "data_dir": "q",
+      "data_dir": "en_letter_q",
       "lh": [
         0.0,
         0.0,
@@ -3932,7 +3932,7 @@
       "language": "en",
       "gloss": "r",
       "display_text": "r",
-      "data_dir": "r",
+      "data_dir": "en_letter_r",
       "lh": [
         0.0,
         0.0,
@@ -4083,7 +4083,7 @@
       "language": "en",
       "gloss": "s",
       "display_text": "s",
-      "data_dir": "s",
+      "data_dir": "en_letter_s",
       "lh": [
         0.0,
         0.0,
@@ -4234,7 +4234,7 @@
       "language": "en",
       "gloss": "so_so",
       "display_text": "So-so",
-      "data_dir": "So-so",
+      "data_dir": "en_word_so_so",
       "lh": [
         0.0,
         0.0,
@@ -4385,7 +4385,7 @@
       "language": "en",
       "gloss": "t",
       "display_text": "t",
-      "data_dir": "t",
+      "data_dir": "en_letter_t",
       "lh": [
         0.0,
         0.0,
@@ -4536,7 +4536,7 @@
       "language": "en",
       "gloss": "u",
       "display_text": "u",
-      "data_dir": "u",
+      "data_dir": "en_letter_u",
       "lh": [
         0.0,
         0.0,
@@ -4687,7 +4687,7 @@
       "language": "en",
       "gloss": "v",
       "display_text": "v",
-      "data_dir": "v",
+      "data_dir": "en_letter_v",
       "lh": [
         0.0,
         0.0,
@@ -4838,7 +4838,7 @@
       "language": "en",
       "gloss": "w",
       "display_text": "w",
-      "data_dir": "w",
+      "data_dir": "en_letter_w",
       "lh": [
         0.0,
         0.0,
@@ -4989,7 +4989,7 @@
       "language": "en",
       "gloss": "what",
       "display_text": "What",
-      "data_dir": "What",
+      "data_dir": "en_word_what",
       "lh": [
         0.0,
         0.0,
@@ -5140,7 +5140,7 @@
       "language": "en",
       "gloss": "whats_up",
       "display_text": "What's up",
-      "data_dir": "What's up",
+      "data_dir": "en_word_whats_up",
       "lh": [
         0.0,
         0.0,
@@ -5291,7 +5291,7 @@
       "language": "en",
       "gloss": "where",
       "display_text": "Where",
-      "data_dir": "Where",
+      "data_dir": "en_word_where",
       "lh": [
         0.0,
         0.0,
@@ -5442,7 +5442,7 @@
       "language": "en",
       "gloss": "work",
       "display_text": "Work",
-      "data_dir": "Work",
+      "data_dir": "en_word_work",
       "lh": [
         0.0,
         0.0,
@@ -5593,7 +5593,7 @@
       "language": "en",
       "gloss": "x",
       "display_text": "x",
-      "data_dir": "x",
+      "data_dir": "en_letter_x",
       "lh": [
         0.0,
         0.0,
@@ -5744,7 +5744,7 @@
       "language": "en",
       "gloss": "y",
       "display_text": "y",
-      "data_dir": "y",
+      "data_dir": "en_letter_y",
       "lh": [
         0.0,
         0.0,
@@ -5895,7 +5895,7 @@
       "language": "en",
       "gloss": "z",
       "display_text": "z",
-      "data_dir": "z",
+      "data_dir": "en_letter_z",
       "lh": [
         0.0,
         0.0,
