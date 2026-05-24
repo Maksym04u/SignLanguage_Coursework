@@ -1,6 +1,93 @@
+import os
+import sys
+from pathlib import Path
+
 import mediapipe as mp
 import cv2
 import numpy as np
+
+_UI_FONT_CACHE = {}
+
+
+def _unicode_font_path() -> Path | None:
+    """Return a TrueType font that supports Cyrillic (Windows / Linux)."""
+    if sys.platform == "win32":
+        fonts_dir = Path(os.environ.get("WINDIR", r"C:\Windows")) / "Fonts"
+        candidates = [
+            fonts_dir / "segoeui.ttf",
+            fonts_dir / "arial.ttf",
+            fonts_dir / "Tahoma.ttf",
+        ]
+    else:
+        candidates = [
+            Path("/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"),
+            Path("/usr/share/fonts/truetype/liberation/LiberationSans-Regular.ttf"),
+        ]
+    for path in candidates:
+        if path.is_file():
+            return path
+    return None
+
+
+def put_ui_text(
+    image: np.ndarray,
+    text: str,
+    org: tuple[int, int],
+    font_scale: float = 0.5,
+    color_bgr: tuple[int, int, int] = (0, 0, 255),
+    thickness: int = 1,
+) -> np.ndarray:
+    """
+    Draw text on a BGR image. Uses a Unicode-capable font so Ukrainian letters
+    render correctly (cv2.putText only supports ASCII and shows '??' otherwise).
+    """
+    if not text:
+        return image
+
+    font_size = max(12, int(round(font_scale * 32)))
+    font_path = _unicode_font_path()
+
+    if font_path is None:
+        cv2.putText(
+            image,
+            text,
+            org,
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_scale,
+            color_bgr,
+            thickness,
+            cv2.LINE_AA,
+        )
+        return image
+
+    try:
+        from PIL import Image, ImageDraw, ImageFont
+    except ImportError:
+        cv2.putText(
+            image,
+            text,
+            org,
+            cv2.FONT_HERSHEY_SIMPLEX,
+            font_scale,
+            color_bgr,
+            thickness,
+            cv2.LINE_AA,
+        )
+        return image
+
+    cache_key = (str(font_path), font_size)
+    if cache_key not in _UI_FONT_CACHE:
+        _UI_FONT_CACHE[cache_key] = ImageFont.truetype(str(font_path), font_size)
+
+    font = _UI_FONT_CACHE[cache_key]
+    pil_img = Image.fromarray(cv2.cvtColor(image, cv2.COLOR_BGR2RGB))
+    draw = ImageDraw.Draw(pil_img)
+    rgb = (color_bgr[2], color_bgr[1], color_bgr[0])
+    x, y = org
+    # Pillow anchors from top-left; nudge down so it lines up with cv2 baseline.
+    draw.text((x, y), text, font=font, fill=rgb)
+    image[:, :] = cv2.cvtColor(np.array(pil_img), cv2.COLOR_RGB2BGR)
+    return image
 
 def draw_landmarks(image, results):
     """
