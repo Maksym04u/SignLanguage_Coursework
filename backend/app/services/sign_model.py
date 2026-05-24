@@ -8,7 +8,8 @@ import numpy as np
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 DEFAULT_MODEL_PATH = PROJECT_ROOT / "my_model.h5"
-DEFAULT_LABELS_PATH = PROJECT_ROOT / "dataset" / "labels.json"
+DEFAULT_LABELS_PATH = PROJECT_ROOT / "dataset" / "model_labels.json"
+FALLBACK_LABELS_PATH = PROJECT_ROOT / "dataset" / "labels.json"
 
 
 class SignModelService:
@@ -26,7 +27,13 @@ class SignModelService:
         self._labels: List[dict] | None = None
         self._lock = threading.Lock()
         self._model_path = Path(os.getenv("SIGN_MODEL_PATH", str(DEFAULT_MODEL_PATH)))
-        self._labels_path = Path(os.getenv("SIGN_LABELS_PATH", str(DEFAULT_LABELS_PATH)))
+        labels_env = os.getenv("SIGN_LABELS_PATH")
+        if labels_env:
+            self._labels_path = Path(labels_env)
+        elif DEFAULT_LABELS_PATH.is_file():
+            self._labels_path = DEFAULT_LABELS_PATH
+        else:
+            self._labels_path = FALLBACK_LABELS_PATH
 
     def _ensure_loaded(self) -> None:
         if self._model is not None and self._labels is not None:

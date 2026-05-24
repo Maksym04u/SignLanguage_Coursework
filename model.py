@@ -1,5 +1,6 @@
 import json
 import os
+from dataclasses import asdict
 from itertools import product
 
 import numpy as np
@@ -32,6 +33,8 @@ PATH = os.path.join("data")
 SEQUENCES = DEFAULT_SEQUENCES
 FRAMES = DEFAULT_FRAMES
 SPLITS_PATH = "dataset/splits.json"
+MODEL_PATH = "my_model.h5"
+MODEL_LABELS_PATH = "dataset/model_labels.json"
 
 
 def labels_with_data(labels_meta: list[LabelEntry]) -> list[LabelEntry]:
@@ -83,7 +86,20 @@ def load_dataset():
 
     x = np.array(landmarks)
     y = to_categorical(labels).astype(int)
-    return x, y, actions
+    return x, y, actions, labels_meta
+
+
+def save_model_labels(labels_meta: list[LabelEntry], path: str = MODEL_LABELS_PATH) -> None:
+    """Persist the exact class list/order used for this training run (for API inference)."""
+    payload = {
+        "version": 1,
+        "model_path": MODEL_PATH,
+        "labels": [asdict(entry) for entry in labels_meta],
+    }
+    with open(path, "w", encoding="utf-8") as fh:
+        json.dump(payload, fh, ensure_ascii=False, indent=2)
+        fh.write("\n")
+    print(f"Saved model label manifest ({len(labels_meta)} classes) to {path}")
 
 
 def load_splits():
@@ -94,7 +110,7 @@ def load_splits():
 
 
 def main():
-    x, y, actions = load_dataset()
+    x, y, actions, labels_meta = load_dataset()
     _ = load_splits()  # Placeholder for explicit split support in next iterations.
 
     x_train, x_test, y_train, y_test = train_test_split(
@@ -122,7 +138,8 @@ def main():
         verbose=1,
     )
 
-    model.save("my_model")
+    model.save(MODEL_PATH)
+    save_model_labels(labels_meta)
 
     predictions = np.argmax(model.predict(x_test), axis=1)
     test_labels = np.argmax(y_test, axis=1)
