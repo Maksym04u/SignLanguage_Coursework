@@ -5,9 +5,8 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .db import get_db
-from .models import TranslationHistory, User
+from .models import User
 from .schemas import (
-    HistoryItem,
     PredictRequest,
     PredictResponse,
     TextToSignRequest,
@@ -102,40 +101,11 @@ def me(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db
 @app.post("/translate/sign-to-text", response_model=TranslationResponse)
 def translate_sign_to_text(
     payload: TranslationRequest,
-    user_id: int = Depends(get_current_user_id),
-    db: Session = Depends(get_db),
+    _user_id: int = Depends(get_current_user_id),
 ):
     raw_text = translator_service.compose_text(payload.tokens)
     corrected_text = grammar_service.correct(raw_text, payload.source_language)
-    history_item = TranslationHistory(
-        user_id=user_id,
-        source_language=payload.source_language,
-        raw_text=raw_text,
-        corrected_text=corrected_text,
-    )
-    db.add(history_item)
-    db.commit()
     return TranslationResponse(raw_text=raw_text, corrected_text=corrected_text)
-
-
-@app.get("/translate/history", response_model=list[HistoryItem])
-def get_history(user_id: int = Depends(get_current_user_id), db: Session = Depends(get_db)):
-    rows = (
-        db.query(TranslationHistory)
-        .filter(TranslationHistory.user_id == user_id)
-        .order_by(TranslationHistory.id.desc())
-        .all()
-    )
-    return [
-        HistoryItem(
-            id=row.id,
-            source_language=row.source_language,
-            raw_text=row.raw_text,
-            corrected_text=row.corrected_text,
-            created_at=row.created_at.isoformat() if row.created_at else "",
-        )
-        for row in rows
-    ]
 
 
 @app.post("/translate/text-to-sign", response_model=TextToSignResponse)
@@ -147,7 +117,10 @@ def translate_text_to_sign(payload: TextToSignRequest, user_id: int = Depends(ge
 @app.post("/translate/predict", response_model=PredictResponse)
 def predict_sign(payload: PredictRequest, user_id: int = Depends(get_current_user_id)):
     try:
-        result = sign_model_service.predict(payload.keypoints)
+        result = sign_model_service.predict(
+            payload.keypoints,
+            source_language=payload.source_language,
+        )
     except ValueError as exc:
         raise HTTPException(status_code=422, detail=str(exc)) from exc
     except FileNotFoundError as exc:

@@ -35,14 +35,6 @@ class TranslationResponse(BaseModel):
     corrected_text: Optional[str]
 
 
-class HistoryItem(BaseModel):
-    id: int
-    source_language: str
-    raw_text: str
-    corrected_text: Optional[str]
-    created_at: str
-
-
 class TextToSignRequest(BaseModel):
     source_language: str = "en"
     text: str
@@ -74,6 +66,7 @@ class TextToSignResponse(BaseModel):
 
 class PredictRequest(BaseModel):
     keypoints: List[List[float]]
+    source_language: str = "en"
 
 
 class PredictResponse(BaseModel):
