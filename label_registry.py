@@ -7,6 +7,31 @@ DATA_ROOT = Path("data")
 DEFAULT_SEQUENCES = 30
 DEFAULT_FRAMES = 20
 
+# Padded one-hot size for language conditioning (slots 2–3 reserved for future langs).
+LANGUAGE_DIM = 4
+LANGUAGE_INDEX: Dict[str, int] = {"en": 0, "uk": 1}
+
+
+def language_from_data_dir(data_dir: str) -> str:
+    """Parse language code from folder names like ``en_letter_a`` / ``uk_letter_а``."""
+    code = data_dir.split("_", 1)[0].lower()
+    if code not in LANGUAGE_INDEX:
+        raise ValueError(
+            f"Cannot infer language from data_dir={data_dir!r}; "
+            f"expected prefix in {list(LANGUAGE_INDEX)}"
+        )
+    return code
+
+
+def language_to_vector(language: str) -> List[float]:
+    """One-hot language vector of length LANGUAGE_DIM."""
+    code = language.lower()
+    if code not in LANGUAGE_INDEX:
+        raise ValueError(f"Unsupported language: {language}")
+    vec = [0.0] * LANGUAGE_DIM
+    vec[LANGUAGE_INDEX[code]] = 1.0
+    return vec
+
 
 @dataclass(frozen=True)
 class LabelEntry:

@@ -18,9 +18,7 @@ export function App() {
   const [userEmail, setUserEmail] = useState(() => localStorage.getItem(LS_EMAIL) ?? "");
   const [authMode, setAuthMode] = useState("login");
   const [language, setLanguage] = useState("en");
-  const [history, setHistory] = useState([]);
   const [authError, setAuthError] = useState("");
-  const [historyError, setHistoryError] = useState("");
 
   const isAuthed = useMemo(() => Boolean(token), [token]);
 
@@ -90,23 +88,11 @@ export function App() {
     }
   };
 
-  const onLoadHistory = async () => {
-    setHistoryError("");
-    try {
-      const data = await api("/translate/history", "GET", null, token);
-      setHistory(data);
-    } catch (e) {
-      setHistoryError(String(e.message || e));
-    }
-  };
-
   const onLogout = () => {
     clearStoredSession();
     setToken("");
     setUserEmail("");
-    setHistory([]);
     setAuthError("");
-    setHistoryError("");
   };
 
   return (
@@ -136,41 +122,9 @@ export function App() {
             </select>
           </section>
 
-          <LiveTranslator
-            token={token}
-            language={language}
-            onSaved={() => {
-              onLoadHistory();
-            }}
-          />
+          <LiveTranslator token={token} language={language} />
 
           <TextToGestures token={token} language={language} />
-
-          <section className="card">
-            <div className="row spaceBetween">
-              <h2>History</h2>
-              <button type="button" onClick={onLoadHistory}>
-                Refresh
-              </button>
-            </div>
-            {historyError ? (
-              <div className="inlineMessage inlineError" role="alert">
-                {historyError}
-              </div>
-            ) : null}
-            {history.length === 0 ? (
-              <p>No translations saved yet.</p>
-            ) : (
-              history.map((item) => (
-                <div key={item.id} className="historyItem">
-                  <span>{item.source_language}</span>
-                  <span>{item.raw_text}</span>
-                  <span>{item.corrected_text || "-"}</span>
-                  <span>{item.created_at}</span>
-                </div>
-              ))
-            )}
-          </section>
         </>
       ) : null}
 

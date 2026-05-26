@@ -23,7 +23,7 @@ function isLettersOnlyToken(token) {
   return typeof token === "string" && /^[A-Za-z]+$/.test(token);
 }
 
-export function LiveTranslator({ token, language, onSaved }) {
+export function LiveTranslator({ token, language }) {
   const videoRef = useRef(null);
   const canvasRef = useRef(null);
   const streamRef = useRef(null);
@@ -100,7 +100,12 @@ export function LiveTranslator({ token, language, onSaved }) {
   const sendPrediction = useCallback(
     async (snapshot) => {
       try {
-        const data = await api("/translate/predict", "POST", { keypoints: snapshot }, token);
+        const data = await api(
+          "/translate/predict",
+          "POST",
+          { keypoints: snapshot, source_language: language },
+          token
+        );
         setConfidence(data.confidence);
         setDetected(data.display_text || "");
         if (data.confidence >= CONFIDENCE_THRESHOLD) {
@@ -114,7 +119,7 @@ export function LiveTranslator({ token, language, onSaved }) {
         setError(String(e.message || e));
       }
     },
-    [appendSign, resetBuffer, token]
+    [appendSign, language, resetBuffer, token]
   );
 
   const tick = useCallback(() => {
@@ -292,7 +297,6 @@ export function LiveTranslator({ token, language, onSaved }) {
         token
       );
       setSavedResult(data);
-      if (onSaved) onSaved(data);
     } catch (e) {
       setError(String(e.message || e));
     }

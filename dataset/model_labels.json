@@ -1,6 +1,11 @@
 {
-  "version": 1,
+  "version": 2,
   "model_path": "my_model.h5",
+  "language_dim": 4,
+  "language_index": {
+    "en": 0,
+    "uk": 1
+  },
   "labels": [
     {
       "class_id": "en.a",
