@@ -1,56 +1,138 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "./api";
-import { drawGestureFrame } from "./keypoints";
+import { computeSequenceBounds, drawGestureFrame } from "./keypoints";
 
-const CANVAS_SIZE = 160;
+// Animation knobs (tuned per user feedback)
+// 12 fps recording rate -> 20 frames @ 83 ms = ~1.66 s of motion.
+const FRAME_MS = 83;
+// Each visible gesture freezes on its first pose for COOLDOWN_MS so the user
+// has time to spot where it begins before the motion starts. This fixes the
+// "moving gestures disappear when the previous one finishes" feeling: with
+// per-sequence bounding boxes, the new gesture's first frame lands wherever
+// its own motion begins (e.g. ц starts near the top), which is usually far
+// from where the previous gesture ended.
+const COOLDOWN_MS = 500;
+const GESTURE_HOLD_MS = 180; // brief hold on the final pose before advancing
+// Silent frames (whitespace / punctuation) flash through the sentence builder
+// without disturbing the stage. A tiny delay keeps the "typing" feel.
+const SILENT_MS = 70;
+const MISSING_MS = 1100;
 
-function GestureCard({ frame }) {
+// Rendering: 4:3 internal resolution matching the live-translation stage.
+// Padding is intentionally generous so the hand sits at ~one-third of the
+// canvas, leaving room for the actual gesture motion (e.g. ц / щ travelling
+// top-to-bottom) instead of being squeezed against the frame edges.
+const STAGE_WIDTH = 640;
+const STAGE_HEIGHT = 480;
+const STAGE_PADDING = 0.45;
+
+const SILENT_TYPES = new Set(["silent", "space"]);
+
+function gestureDurationMs(frame) {
+  if (!frame) return 0;
+  if (SILENT_TYPES.has(frame.type)) return SILENT_MS;
+  if (frame.type === "missing") return MISSING_MS;
+  const seqLen =
+    Array.isArray(frame.sequence) && frame.sequence.length > 0
+      ? frame.sequence.length
+      : 1;
+  return COOLDOWN_MS + seqLen * FRAME_MS + GESTURE_HOLD_MS;
+}
+
+function PlaybackStage({ frame, bounds, playing, done }) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
     const canvas = canvasRef.current;
-    if (!canvas) return;
-    canvas.width = CANVAS_SIZE;
-    canvas.height = CANVAS_SIZE;
-    if (frame.type === "missing" || frame.type === "space") {
-      const ctx = canvas.getContext("2d");
-      ctx.fillStyle = frame.type === "missing" ? "#1f2937" : "#0f172a";
+    if (!canvas) return undefined;
+    if (canvas.width !== STAGE_WIDTH) canvas.width = STAGE_WIDTH;
+    if (canvas.height !== STAGE_HEIGHT) canvas.height = STAGE_HEIGHT;
+    const ctx = canvas.getContext("2d");
+
+    const paintBackground = (color = "#0f172a") => {
+      ctx.fillStyle = color;
       ctx.fillRect(0, 0, canvas.width, canvas.height);
-      return;
+    };
+
+    const drawOptions = { padding: STAGE_PADDING, bounds };
+
+    if (!frame) {
+      paintBackground();
+      if (done) {
+        ctx.fillStyle = "rgba(148, 163, 184, 0.85)";
+        ctx.font = "600 28px Arial, sans-serif";
+        ctx.textAlign = "center";
+        ctx.textBaseline = "middle";
+        ctx.fillText(
+          "Press Replay to play it again",
+          canvas.width / 2,
+          canvas.height / 2
+        );
+      }
+      return undefined;
     }
-    drawGestureFrame(canvas, frame.lh, frame.rh);
-  }, [frame]);
 
-  if (frame.type === "space") {
-    return (
-      <div className="gestureCard gestureCardSpace" aria-label="space">
-        <div className="gestureSpaceBar" />
-        <span className="gestureCardLabel gestureCardLabelMuted">space</span>
-      </div>
-    );
-  }
+    if (frame.type === "missing") {
+      paintBackground("#3f1d1d");
+      ctx.fillStyle = "rgba(248, 113, 113, 0.95)";
+      ctx.font = "600 36px Arial, sans-serif";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(
+        `no gesture for "${frame.label}"`,
+        canvas.width / 2,
+        canvas.height / 2
+      );
+      return undefined;
+    }
 
-  if (frame.type === "missing") {
-    return (
-      <div className="gestureCard gestureCardMissing" title="No gesture available">
-        <canvas ref={canvasRef} className="gestureCanvas" />
-        <span className="gestureCardBadge gestureCardBadgeMissing">missing</span>
-        <span className="gestureCardLabel">{frame.label}</span>
-      </div>
-    );
-  }
+    const seq = Array.isArray(frame.sequence) ? frame.sequence : null;
 
-  const badgeClass =
-    frame.type === "word" ? "gestureCardBadgeWord" : "gestureCardBadgeLetter";
+    if (!seq || seq.length === 0) {
+      drawGestureFrame(canvas, frame.lh, frame.rh, drawOptions);
+      return undefined;
+    }
 
-  return (
-    <div className="gestureCard">
-      <canvas ref={canvasRef} className="gestureCanvas" />
-      <span className={`gestureCardBadge ${badgeClass}`}>{frame.type}</span>
-      <span className="gestureCardLabel">{frame.label}</span>
-    </div>
-  );
+    if (!playing) {
+      const last = seq[seq.length - 1];
+      drawGestureFrame(canvas, last.lh, last.rh, drawOptions);
+      return undefined;
+    }
+
+    let raf = 0;
+    let cancelled = false;
+    const start = performance.now();
+    // Paint frame 0 once immediately so the cooldown pose is visible
+    // without waiting for the first animation tick.
+    drawGestureFrame(canvas, seq[0].lh, seq[0].rh, drawOptions);
+
+    const loop = (now) => {
+      if (cancelled) return;
+      const elapsed = now - start;
+      if (elapsed < COOLDOWN_MS) {
+        // Freeze on the first pose so the eye can find the new gesture
+        // before motion starts.
+        raf = requestAnimationFrame(loop);
+        return;
+      }
+      const animElapsed = elapsed - COOLDOWN_MS;
+      const idx = Math.min(seq.length - 1, Math.floor(animElapsed / FRAME_MS));
+      const pose = seq[idx];
+      drawGestureFrame(canvas, pose.lh, pose.rh, drawOptions);
+      // Hold on the last pose until the controller advances to the next frame.
+      if (idx >= seq.length - 1) return;
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+
+    return () => {
+      cancelled = true;
+      cancelAnimationFrame(raf);
+    };
+  }, [frame, bounds, playing, done]);
+
+  return <canvas ref={canvasRef} className="gestureStageCanvas" />;
 }
 
 export function TextToGestures({ token, language }) {
@@ -59,6 +141,91 @@ export function TextToGestures({ token, language }) {
   const [summary, setSummary] = useState(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+
+  // -1 means "not playing". When >=0 it's the index of the frame currently on
+  // stage; its label will be appended to the built sentence when its timer
+  // fires, then we advance to the next.
+  const [activeIdx, setActiveIdx] = useState(-1);
+  const [revealedCount, setRevealedCount] = useState(0);
+  const timerRef = useRef(0);
+
+  const clearTimer = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = 0;
+    }
+  }, []);
+
+  useEffect(() => {
+    clearTimer();
+    setActiveIdx(-1);
+    setRevealedCount(0);
+  }, [frames, clearTimer]);
+
+  useEffect(() => {
+    if (frames.length > 0) setActiveIdx(0);
+  }, [frames]);
+
+  useEffect(() => {
+    clearTimer();
+    if (activeIdx < 0 || activeIdx >= frames.length) return undefined;
+    const current = frames[activeIdx];
+    const duration = gestureDurationMs(current);
+
+    timerRef.current = window.setTimeout(() => {
+      setRevealedCount((c) => Math.max(c, activeIdx + 1));
+      if (activeIdx + 1 < frames.length) {
+        setActiveIdx(activeIdx + 1);
+      } else {
+        setActiveIdx(-1);
+      }
+    }, duration);
+
+    return clearTimer;
+  }, [activeIdx, frames, clearTimer]);
+
+  useEffect(() => () => clearTimer(), [clearTimer]);
+
+  const isPlaybackRunning = activeIdx >= 0;
+  const done =
+    !isPlaybackRunning && frames.length > 0 && revealedCount >= frames.length;
+
+  // The "stage" shows only word/letter/missing gestures -- silent frames
+  // (spaces, punctuation) flash through the sentence builder without
+  // interrupting the visual rhythm. We anchor `stageFrame` on the most
+  // recent visible frame so silent transitions look like a held pose.
+  const stageFrame = useMemo(() => {
+    if (!frames.length) return null;
+    const startIdx = isPlaybackRunning
+      ? activeIdx
+      : Math.min(revealedCount, frames.length) - 1;
+    for (let i = startIdx; i >= 0; i--) {
+      const f = frames[i];
+      if (f && !SILENT_TYPES.has(f.type)) return f;
+    }
+    return null;
+  }, [frames, activeIdx, revealedCount, isPlaybackRunning]);
+
+  // The stage should animate only when the controller is sitting on the
+  // stageFrame; while silent frames pass by, freeze on the last pose.
+  const stageIsAnimating =
+    isPlaybackRunning && frames[activeIdx] === stageFrame;
+
+  // Pre-compute one shared bounding box per clip so every frame is drawn
+  // with the same transform -> the hand actually moves across the canvas
+  // (e.g. ц top->bottom) instead of being re-fitted into the box per frame.
+  const stageBounds = useMemo(() => {
+    if (!stageFrame || !Array.isArray(stageFrame.sequence)) return null;
+    return computeSequenceBounds(stageFrame.sequence);
+  }, [stageFrame]);
+
+  const builtSentence = useMemo(() => {
+    if (!frames.length) return "";
+    return frames
+      .slice(0, revealedCount)
+      .map((f) => f.label || "")
+      .join("");
+  }, [frames, revealedCount]);
 
   const onTranslate = async () => {
     setError("");
@@ -85,18 +252,52 @@ export function TextToGestures({ token, language }) {
     }
   };
 
+  const onReplay = () => {
+    if (!frames.length) return;
+    clearTimer();
+    setRevealedCount(0);
+    setActiveIdx(0);
+  };
+
   const onClear = () => {
+    clearTimer();
     setText("");
     setFrames([]);
     setSummary(null);
     setError("");
+    setActiveIdx(-1);
+    setRevealedCount(0);
   };
+
+  const hasFrames = frames.length > 0;
+
+  // Progress counts only stageable (visible) frames so the user sees a clean
+  // "3 of 5 gestures" rather than something inflated by punctuation.
+  const visibleFrames = useMemo(
+    () => frames.filter((f) => !SILENT_TYPES.has(f.type)),
+    [frames]
+  );
+
+  const visiblePlayed = useMemo(
+    () =>
+      frames
+        .slice(0, Math.min(revealedCount, frames.length))
+        .filter((f) => !SILENT_TYPES.has(f.type)).length,
+    [frames, revealedCount]
+  );
+
+  const progressLabel = visibleFrames.length
+    ? `${Math.min(
+        isPlaybackRunning ? visiblePlayed + (stageIsAnimating ? 1 : 0) : visiblePlayed,
+        visibleFrames.length
+      )} / ${visibleFrames.length}`
+    : "";
 
   return (
     <section className="card">
       <h2>Text to Gestures</h2>
       <p className="cardSubtitle">
-        Type a phrase and we will render the matching signs from your dataset.
+        Type a phrase and we will play the matching signs from your dataset.
         Whole-word gestures are used when available; otherwise the word is
         spelled out letter by letter.
       </p>
@@ -116,6 +317,14 @@ export function TextToGestures({ token, language }) {
         <button
           type="button"
           className="secondaryBtn"
+          onClick={onReplay}
+          disabled={loading || !hasFrames}
+        >
+          Replay
+        </button>
+        <button
+          type="button"
+          className="secondaryBtn"
           onClick={onClear}
           disabled={loading}
         >
@@ -127,6 +336,56 @@ export function TextToGestures({ token, language }) {
         <div className="inlineMessage inlineError" role="alert">
           {error}
         </div>
+      ) : null}
+
+      {hasFrames ? (
+        <>
+          <div className="gesturePlaybackBar">
+            <div className="gesturePlaybackLabel">
+              {isPlaybackRunning
+                ? "Building sentence..."
+                : done
+                ? "Complete"
+                : "Ready"}
+            </div>
+            <p className="gesturePlaybackText">
+              {builtSentence || (
+                <span className="gesturePlaybackPlaceholder">&nbsp;</span>
+              )}
+              {isPlaybackRunning ? (
+                <span className="gesturePlaybackCaret">|</span>
+              ) : null}
+            </p>
+          </div>
+
+          <div className="gestureStage">
+            <PlaybackStage
+              frame={stageFrame}
+              bounds={stageBounds}
+              playing={stageIsAnimating}
+              done={done}
+            />
+            <div className="gestureStageOverlay">
+              {stageFrame ? (
+                <>
+                  <span
+                    className={`gestureStageBadge gestureStageBadge-${stageFrame.type}`}
+                  >
+                    {stageFrame.type}
+                  </span>
+                  <span className="gestureStageCurrentLabel">
+                    {stageFrame.label}
+                  </span>
+                </>
+              ) : (
+                <span className="gestureStageBadge gestureStageBadge-ready">
+                  ready
+                </span>
+              )}
+              <span className="gestureStageProgress">{progressLabel}</span>
+            </div>
+          </div>
+        </>
       ) : null}
 
       {summary ? (
@@ -141,14 +400,6 @@ export function TextToGestures({ token, language }) {
               missing: {summary.letters_missing.join(", ")}
             </span>
           ) : null}
-        </div>
-      ) : null}
-
-      {frames.length > 0 ? (
-        <div className="gestureStrip">
-          {frames.map((frame, idx) => (
-            <GestureCard key={`${frame.type}-${idx}`} frame={frame} />
-          ))}
         </div>
       ) : null}
     </section>

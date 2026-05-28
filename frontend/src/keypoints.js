@@ -159,23 +159,86 @@ function hasHandData(vec) {
   return false;
 }
 
+/**
+ * Compute the data-space bounding box of every hand across a 20-frame sequence.
+ *
+ * Returns ``{ lh, rh }`` where each is either ``null`` (hand absent for the
+ * whole clip) or ``{ minX, maxX, minY, maxY }`` in the raw landmark space.
+ * Passing this to ``drawGestureFrame`` via ``options.bounds`` makes the
+ * playback use a single shared transform for the entire clip, so vertical /
+ * horizontal motion (e.g. Ukrainian ц, щ) actually shows up on screen
+ * instead of being normalised away into a tiny shake.
+ */
+export function computeSequenceBounds(sequence) {
+  if (!Array.isArray(sequence) || sequence.length === 0) return null;
+  const collect = (key) => {
+    let minX = Infinity;
+    let maxX = -Infinity;
+    let minY = Infinity;
+    let maxY = -Infinity;
+    let any = false;
+    for (const frame of sequence) {
+      const v = frame ? frame[key] : null;
+      if (!hasHandData(v)) continue;
+      any = true;
+      for (let i = 0; i < LANDMARKS_PER_HAND; i++) {
+        const x = v[i * 3];
+        const y = v[i * 3 + 1];
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+      }
+    }
+    return any ? { minX, maxX, minY, maxY } : null;
+  };
+  const lh = collect("lh");
+  const rh = collect("rh");
+  if (!lh && !rh) return null;
+  return { lh, rh };
+}
+
 // Convert a 63-float wrist-centered vector into 21 (x,y) screen points,
-// auto-fitting the hand into the requested box with a small margin.
-function buildScreenPoints(vec, boxX, boxY, boxW, boxH, mirrorX = false) {
-  let minX = Infinity;
-  let maxX = -Infinity;
-  let minY = Infinity;
-  let maxY = -Infinity;
-  for (let i = 0; i < LANDMARKS_PER_HAND; i++) {
-    const x = mirrorX ? -vec[i * 3] : vec[i * 3];
-    const y = vec[i * 3 + 1];
-    if (x < minX) minX = x;
-    if (x > maxX) maxX = x;
-    if (y < minY) minY = y;
-    if (y > maxY) maxY = y;
+// auto-fitting into the requested box. The `margin` parameter is the
+// fraction of the box reserved as padding on each axis (smaller -> larger
+// hand). When `bounds` is provided, those data-space extremes are used
+// instead of the current frame's own min/max, which is essential for
+// animations: every frame shares the same transform so motion is preserved.
+function buildScreenPoints(
+  vec,
+  boxX,
+  boxY,
+  boxW,
+  boxH,
+  mirrorX = false,
+  margin = 0.18,
+  bounds = null
+) {
+  let minX;
+  let maxX;
+  let minY;
+  let maxY;
+  if (bounds) {
+    // `bounds` is stored in raw data space; flip if we're mirroring the hand.
+    minX = mirrorX ? -bounds.maxX : bounds.minX;
+    maxX = mirrorX ? -bounds.minX : bounds.maxX;
+    minY = bounds.minY;
+    maxY = bounds.maxY;
+  } else {
+    minX = Infinity;
+    maxX = -Infinity;
+    minY = Infinity;
+    maxY = -Infinity;
+    for (let i = 0; i < LANDMARKS_PER_HAND; i++) {
+      const x = mirrorX ? -vec[i * 3] : vec[i * 3];
+      const y = vec[i * 3 + 1];
+      if (x < minX) minX = x;
+      if (x > maxX) maxX = x;
+      if (y < minY) minY = y;
+      if (y > maxY) maxY = y;
+    }
   }
 
-  const margin = 0.18;
   const targetW = boxW * (1 - margin);
   const targetH = boxH * (1 - margin);
   const spanX = Math.max(maxX - minX, 1e-6);
@@ -247,25 +310,49 @@ export function drawGestureFrame(canvas, lh, rh, options = {}) {
 
   if (!hasLh && !hasRh) {
     ctx.fillStyle = "rgba(148, 163, 184, 0.85)";
-    ctx.font = "600 16px Arial, sans-serif";
+    ctx.font = `600 ${Math.max(16, Math.min(w, h) / 18)}px Arial, sans-serif`;
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
     ctx.fillText(options.emptyLabel ?? "no hand", w / 2, h / 2);
     return;
   }
 
+  // Larger canvases need thicker strokes/dots so the hand stays readable.
+  const minSide = Math.min(w, h);
+  const palette = {
+    ...HAND_PALETTE,
+    lineWidth: options.lineWidth ?? Math.max(2.5, minSide / 80),
+    dotRadius: options.dotRadius ?? Math.max(3, minSide / 60),
+  };
+  const padding = options.padding ?? 0.18;
+  const lhBounds = options.bounds?.lh ?? null;
+  const rhBounds = options.bounds?.rh ?? null;
+
   if (hasLh && hasRh) {
     const halfW = w / 2;
-    strokeHand(ctx, buildScreenPoints(lh, 0, 0, halfW, h), HAND_PALETTE);
+    strokeHand(
+      ctx,
+      buildScreenPoints(lh, 0, 0, halfW, h, false, padding, lhBounds),
+      palette
+    );
     // Right hand was mirrored on capture so it could share the canonical
     // shape with the left; flip it back so two-hand gestures look natural.
-    strokeHand(ctx, buildScreenPoints(rh, halfW, 0, halfW, h, true), HAND_PALETTE);
+    strokeHand(
+      ctx,
+      buildScreenPoints(rh, halfW, 0, halfW, h, true, padding, rhBounds),
+      palette
+    );
     return;
   }
 
   const vec = hasLh ? lh : rh;
+  const handBounds = hasLh ? lhBounds : rhBounds;
   // Single-hand stored data is already in canonical "left-hand" orientation.
   // Mirror it so it looks like a right-hand seen from the front, which
   // matches the experience of the live mirrored stream.
-  strokeHand(ctx, buildScreenPoints(vec, 0, 0, w, h, true), HAND_PALETTE);
+  strokeHand(
+    ctx,
+    buildScreenPoints(vec, 0, 0, w, h, true, padding, handBounds),
+    palette
+  );
 }

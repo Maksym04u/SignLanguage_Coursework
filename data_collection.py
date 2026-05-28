@@ -21,6 +21,7 @@ from label_registry import (
     load_labels,
 )
 from dataset.build_gesture_lexicon import update_lexicon_for_data_dir
+from dataset.build_translation_data import build_for_data_dir as build_translation_data_for
 from dataset.collection_setup_ui import run_setup_dialog
 from dataset.label_builder import (
     build_labels_from_symbols,
@@ -164,6 +165,18 @@ class SignLanguageDataCollector:
                 except Exception:
                     logging.exception(
                         "Failed to refresh gesture lexicon for %s", data_dir
+                    )
+                try:
+                    used_seq = build_translation_data_for(data_dir)
+                    if used_seq is not None:
+                        logging.info(
+                            "Refreshed translation_data/%s from sequence %s",
+                            data_dir,
+                            used_seq,
+                        )
+                except Exception:
+                    logging.exception(
+                        "Failed to refresh translation_data for %s", data_dir
                     )
 
 

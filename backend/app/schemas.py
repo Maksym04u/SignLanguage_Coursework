@@ -40,6 +40,11 @@ class TextToSignRequest(BaseModel):
     text: str
 
 
+class GestureSequenceFrame(BaseModel):
+    lh: List[float]
+    rh: List[float]
+
+
 class GestureFrame(BaseModel):
     type: str  # "word" | "letter" | "space" | "missing"
     label: str
@@ -48,6 +53,7 @@ class GestureFrame(BaseModel):
     language: Optional[str] = None
     lh: Optional[List[float]] = None
     rh: Optional[List[float]] = None
+    sequence: Optional[List[GestureSequenceFrame]] = None
     reason: Optional[str] = None
 
 
