@@ -64,6 +64,8 @@ class TextToGestureService:
         self._letters_by_lang: Dict[str, Dict[str, Dict[str, Any]]] = {}
         # data_dir -> [{"lh": [...63 floats], "rh": [...63 floats]}, x20]
         self._sequence_cache: Dict[str, List[Dict[str, List[float]]]] = {}
+        self._sequence_cache_mtime: Dict[str, float] = {}
+        self._playback_format_cache: Dict[str, str] = {}
 
     def _ensure_loaded(self) -> None:
         if self._loaded:
@@ -115,6 +117,40 @@ class TextToGestureService:
             self._words_by_lang = {}
             self._letters_by_lang = {}
             self._sequence_cache = {}
+            self._sequence_cache_mtime = {}
+            self._playback_format_cache = {}
+
+    def _playback_meta_mtime(self, data_dir: str) -> float:
+        meta_path = self._translation_data_root / data_dir / "meta.json"
+        if not meta_path.is_file():
+            dir_path = self._translation_data_root / data_dir
+            if not dir_path.is_dir():
+                return 0.0
+            try:
+                return max(
+                    (p.stat().st_mtime for p in dir_path.glob("*.npy")),
+                    default=0.0,
+                )
+            except OSError:
+                return 0.0
+        try:
+            return meta_path.stat().st_mtime
+        except OSError:
+            return 0.0
+
+    def _load_playback_format(self, data_dir: str) -> Optional[str]:
+        if data_dir in self._playback_format_cache:
+            return self._playback_format_cache[data_dir]
+        meta_path = self._translation_data_root / data_dir / "meta.json"
+        fmt = None
+        if meta_path.is_file():
+            try:
+                meta = json.loads(meta_path.read_text(encoding="utf-8"))
+                fmt = meta.get("format")
+            except Exception:
+                pass
+        self._playback_format_cache[data_dir] = fmt
+        return fmt
 
     def _load_sequence(self, data_dir: Optional[str]) -> Optional[List[Dict[str, List[float]]]]:
         """Return a 20-frame sequence for ``data_dir`` from ``translation_data/``.
@@ -125,8 +161,9 @@ class TextToGestureService:
         """
         if not data_dir:
             return None
+        mtime = self._playback_meta_mtime(data_dir)
         cached = self._sequence_cache.get(data_dir)
-        if cached is not None:
+        if cached is not None and self._sequence_cache_mtime.get(data_dir) == mtime:
             return cached
 
         dir_path = self._translation_data_root / data_dir
@@ -156,6 +193,8 @@ class TextToGestureService:
             )
 
         self._sequence_cache[data_dir] = frames
+        self._sequence_cache_mtime[data_dir] = mtime
+        self._playback_format_cache.pop(data_dir, None)
         return frames
 
     # Characters that we treat as "part of a word" when grouping tokens so
@@ -198,6 +237,7 @@ class TextToGestureService:
         return tokens
 
     def _frame_from_entry(self, entry: Dict[str, Any], frame_type: str) -> Dict[str, Any]:
+        data_dir = entry.get("data_dir")
         return {
             "type": frame_type,
             "label": entry.get("display_text") or entry.get("gloss", ""),
@@ -206,7 +246,8 @@ class TextToGestureService:
             "language": entry.get("language"),
             "lh": entry.get("lh"),
             "rh": entry.get("rh"),
-            "sequence": self._load_sequence(entry.get("data_dir")),
+            "sequence": self._load_sequence(data_dir),
+            "playback_format": self._load_playback_format(data_dir),
         }
 
     @staticmethod

@@ -46,7 +46,7 @@ class GestureSequenceFrame(BaseModel):
 
 
 class GestureFrame(BaseModel):
-    type: str  # "word" | "letter" | "space" | "missing"
+    type: str  # "word" | "letter" | "space" | "missing" | "silent"
     label: str
     gloss: Optional[str] = None
     class_id: Optional[str] = None
@@ -54,6 +54,7 @@ class GestureFrame(BaseModel):
     lh: Optional[List[float]] = None
     rh: Optional[List[float]] = None
     sequence: Optional[List[GestureSequenceFrame]] = None
+    playback_format: Optional[str] = None  # e.g. "raw_v1"
     reason: Optional[str] = None
 
 
