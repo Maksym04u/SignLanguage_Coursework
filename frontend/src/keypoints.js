@@ -255,6 +255,19 @@ export function computeSequenceBounds(sequence) {
   return { lh, rh };
 }
 
+/** Union of per-hand bounds — used for raw two-hand clips in image space. */
+function mergeHandBounds(lhBounds, rhBounds) {
+  if (!lhBounds && !rhBounds) return null;
+  if (!lhBounds) return rhBounds;
+  if (!rhBounds) return lhBounds;
+  return {
+    minX: Math.min(lhBounds.minX, rhBounds.minX),
+    maxX: Math.max(lhBounds.maxX, rhBounds.maxX),
+    minY: Math.min(lhBounds.minY, rhBounds.minY),
+    maxY: Math.max(lhBounds.maxY, rhBounds.maxY),
+  };
+}
+
 // Convert a 63-float wrist-centered vector into 21 (x,y) screen points,
 // auto-fitting into the requested box. The `margin` parameter is the
 // fraction of the box reserved as padding on each axis (smaller -> larger
@@ -399,6 +412,25 @@ export function drawGestureFrame(canvas, lh, rh, options = {}) {
   const mirrorSingleHand = !isRaw;
 
   if (hasLh && hasRh) {
+    // Raw clips store both hands in shared image coordinates (0..1). Draw them
+    // on the full canvas so they stay where they were recorded. Splitting lh
+    // into the left half and rh into the right half swaps sides on mirror-view
+    // footage (anatomical lh often sits screen-right, rh screen-left).
+    if (isRaw) {
+      const merged = mergeHandBounds(lhBounds, rhBounds);
+      strokeHand(
+        ctx,
+        buildScreenPoints(drawLh, 0, 0, w, h, false, padding, merged),
+        palette
+      );
+      strokeHand(
+        ctx,
+        buildScreenPoints(drawRh, 0, 0, w, h, false, padding, merged),
+        palette
+      );
+      return;
+    }
+
     const halfW = w / 2;
     strokeHand(
       ctx,
@@ -407,7 +439,7 @@ export function drawGestureFrame(canvas, lh, rh, options = {}) {
     );
     strokeHand(
       ctx,
-      buildScreenPoints(drawRh, halfW, 0, halfW, h, !isRaw, padding, rhBounds),
+      buildScreenPoints(drawRh, halfW, 0, halfW, h, true, padding, rhBounds),
       palette
     );
     return;

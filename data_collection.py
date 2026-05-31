@@ -5,6 +5,7 @@
 import argparse
 import logging
 import os
+import time
 from typing import List
 
 import cv2
@@ -32,6 +33,10 @@ from dataset.label_builder import (
 logging.basicConfig(
     level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s"
 )
+
+# Automatic pauses before each recording (replaces pressing SPACE).
+PAUSE_BETWEEN_SEQUENCES_SEC = 1.0
+PAUSE_BETWEEN_WORDS_SEC = 12.0
 
 
 class SignLanguageDataCollector:
@@ -64,6 +69,83 @@ class SignLanguageDataCollector:
             raise RuntimeError("Cannot access camera")
         return cap
 
+    def _draw_preview_overlay(
+        self,
+        image,
+        entry: LabelEntry,
+        sequence: int,
+        footer: str,
+        countdown_sec: float | None = None,
+    ) -> None:
+        put_ui_text(
+            image,
+            f"Sign: {entry.display_text}",
+            (20, 20),
+            font_scale=0.7,
+            color_bgr=(0, 0, 255),
+        )
+        put_ui_text(
+            image,
+            f"Sequence: {sequence + 1}/{self.sequences}",
+            (20, 55),
+            font_scale=0.5,
+            color_bgr=(0, 0, 255),
+        )
+        put_ui_text(
+            image,
+            footer,
+            (20, 380),
+            font_scale=0.85,
+            color_bgr=(0, 0, 255),
+        )
+        if countdown_sec is not None and countdown_sec > 0:
+            put_ui_text(
+                image,
+                f"{int(countdown_sec + 0.999)}",
+                (20, 430),
+                font_scale=1.4,
+                color_bgr=(0, 0, 255),
+            )
+        put_ui_text(
+            image,
+            "Press 'q' to quit",
+            (20, 480),
+            font_scale=0.55,
+            color_bgr=(0, 0, 255),
+        )
+
+    def _countdown(
+        self,
+        cap: cv2.VideoCapture,
+        holistic,
+        entry: LabelEntry,
+        sequence: int,
+        seconds: float,
+        message: str,
+    ) -> None:
+        """Show live preview while counting down before a recording starts."""
+        deadline = time.monotonic() + seconds
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0:
+                break
+
+            ret, image = cap.read()
+            if not ret:
+                continue
+
+            image = cv2.flip(image, 1)
+            results = image_process(image, holistic)
+            draw_landmarks(image, results)
+            self._draw_preview_overlay(
+                image, entry, sequence, message, countdown_sec=remaining
+            )
+
+            cv2.imshow("Camera", image)
+            key = cv2.waitKey(1) & 0xFF
+            if key == ord("q"):
+                raise KeyboardInterrupt
+
     def collect_data(self) -> None:
         cap = self.initialize_camera()
         data_dirs_with_new_data: set[str] = set()
@@ -72,93 +154,82 @@ class SignLanguageDataCollector:
             with mp.solutions.holistic.Holistic(
                 min_detection_confidence=0.75, min_tracking_confidence=0.75
             ) as holistic:
-                for entry, sequence in product(self.labels, range(self.sequences)):
-                    title = f"{entry.display_text} ({entry.class_id})"
-                    print(f"\nRecording {title}, sequence {sequence + 1}/{self.sequences}")
-                    print("Press SPACE to start recording, 'q' to quit")
-
-                    while True:
-                        ret, image = cap.read()
-                        if not ret:
-                            continue
-
-                        image = cv2.flip(image, 1)
-                        results = image_process(image, holistic)
-                        draw_landmarks(image, results)
-
-                        put_ui_text(
-                            image,
-                            f"Sign: {entry.display_text}",
-                            (20, 20),
-                            font_scale=0.7,
-                            color_bgr=(0, 0, 255),
-                        )
-                        put_ui_text(
-                            image,
-                            f"Sequence: {sequence + 1}/{self.sequences}",
-                            (20, 55),
-                            font_scale=0.5,
-                            color_bgr=(0, 0, 255),
-                        )
-                        put_ui_text(
-                            image,
-                            "Press SPACE to start",
-                            (20, 400),
-                            font_scale=1.0,
-                            color_bgr=(0, 0, 255),
+                for entry in self.labels:
+                    for sequence in range(self.sequences):
+                        title = f"{entry.display_text} ({entry.class_id})"
+                        print(
+                            f"\nRecording {title}, "
+                            f"sequence {sequence + 1}/{self.sequences}"
                         )
 
-                        cv2.imshow("Camera", image)
-                        key = cv2.waitKey(1) & 0xFF
-                        if key == ord(" "):
-                            break
-                        if key == ord("q"):
-                            raise KeyboardInterrupt
+                        if sequence == 0:
+                            pause = PAUSE_BETWEEN_WORDS_SEC
+                            message = (
+                                f"Get ready — recording starts in {int(pause)}s "
+                                f"(new sign)"
+                            )
+                            print(
+                                f"Waiting {int(pause)}s before first sequence "
+                                f"of this sign..."
+                            )
+                        else:
+                            pause = PAUSE_BETWEEN_SEQUENCES_SEC
+                            message = (
+                                f"Next sequence in {int(pause)}s — hold the sign"
+                            )
+                            print(f"Waiting {int(pause)}s before next sequence...")
 
-                    print("Recording...")
-                    raw_sequence_frames: List[np.ndarray] = []
-                    for frame in range(self.frames):
-                        ret, image = cap.read()
-                        if not ret:
-                            continue
+                        self._countdown(cap, holistic, entry, sequence, pause, message)
 
-                        image = cv2.flip(image, 1)
-                        results = image_process(image, holistic)
-                        draw_landmarks(image, results)
+                        print("Recording...")
+                        raw_sequence_frames: List[np.ndarray] = []
+                        for frame in range(self.frames):
+                            ret, image = cap.read()
+                            if not ret:
+                                continue
 
-                        keypoints = keypoint_extraction(results)
-                        raw_keypoints = raw_keypoint_extraction(results)
-                        frame_path = os.path.join(
-                            self.PATH, entry.data_dir, str(sequence), str(frame)
-                        )
-                        np.save(frame_path, keypoints)
-                        raw_sequence_frames.append(raw_keypoints)
+                            image = cv2.flip(image, 1)
+                            results = image_process(image, holistic)
+                            draw_landmarks(image, results)
 
-                        put_ui_text(
-                            image,
-                            f"Sign: {entry.display_text}",
-                            (20, 20),
-                            font_scale=0.7,
-                            color_bgr=(0, 0, 255),
-                        )
-                        put_ui_text(
-                            image,
-                            f"Frame: {frame + 1}/{self.frames}",
-                            (20, 55),
-                            font_scale=0.5,
-                            color_bgr=(0, 0, 255),
-                        )
-                        cv2.imshow("Camera", image)
-                        cv2.waitKey(1)
+                            keypoints = keypoint_extraction(results)
+                            raw_keypoints = raw_keypoint_extraction(results)
+                            frame_path = os.path.join(
+                                self.PATH, entry.data_dir, str(sequence), str(frame)
+                            )
+                            np.save(frame_path, keypoints)
+                            raw_sequence_frames.append(raw_keypoints)
 
-                    if write_raw_playback(entry.data_dir, raw_sequence_frames, sequence):
-                        logging.info(
-                            "Updated translation_data/%s from sequence %s (raw playback)",
-                            entry.data_dir,
-                            sequence,
-                        )
-                    print("Sequence completed")
-                    data_dirs_with_new_data.add(entry.data_dir)
+                            put_ui_text(
+                                image,
+                                f"Sign: {entry.display_text}",
+                                (20, 20),
+                                font_scale=0.7,
+                                color_bgr=(0, 0, 255),
+                            )
+                            put_ui_text(
+                                image,
+                                f"Frame: {frame + 1}/{self.frames}",
+                                (20, 55),
+                                font_scale=0.5,
+                                color_bgr=(0, 0, 255),
+                            )
+                            cv2.imshow("Camera", image)
+                            key = cv2.waitKey(1) & 0xFF
+                            if key == ord("q"):
+                                raise KeyboardInterrupt
+
+                        if write_raw_playback(
+                            entry.data_dir, raw_sequence_frames, sequence
+                        ):
+                            logging.info(
+                                "Updated translation_data/%s from sequence %s "
+                                "(raw playback)",
+                                entry.data_dir,
+                                sequence,
+                            )
+                        print("Sequence completed")
+                        data_dirs_with_new_data.add(entry.data_dir)
 
         except KeyboardInterrupt:
             print("\nData collection interrupted by user")
@@ -317,7 +388,10 @@ def _resolve_existing_labels(args: argparse.Namespace) -> List[LabelEntry]:
 def _print_plan(labels: List[LabelEntry]) -> None:
     sequences_total = len(labels) * 30
     print(f"\nWill record {len(labels)} class(es) x 30 sequences = {sequences_total} sequences.")
-    print("Press SPACE before each sequence; press 'q' during preview to stop early.\n")
+    print(
+        f"Automatic pauses: {int(PAUSE_BETWEEN_SEQUENCES_SEC)}s between sequences, "
+        f"{int(PAUSE_BETWEEN_WORDS_SEC)}s before each new sign. Press 'q' to stop.\n"
+    )
     for entry in labels:
         status = "re-record" if has_complete_data(entry.data_dir) else "new"
         print(

@@ -36,13 +36,6 @@
       "data_dir": "en_word_bad"
     },
     {
-      "class_id": "en.busy",
-      "language": "en",
-      "gloss": "busy",
-      "display_text": "Busy",
-      "data_dir": "en_word_busy"
-    },
-    {
       "class_id": "en.c",
       "language": "en",
       "gloss": "c",

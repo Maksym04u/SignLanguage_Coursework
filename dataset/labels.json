@@ -289,6 +289,20 @@
       "data_dir": "uk_letter_1"
     },
     {
+      "class_id": "uk.name",
+      "language": "uk",
+      "gloss": "name",
+      "display_text": "name",
+      "data_dir": "uk_word_name"
+    },
+    {
+      "class_id": "uk.work",
+      "language": "uk",
+      "gloss": "work",
+      "display_text": "work",
+      "data_dir": "uk_word_work"
+    },
+    {
       "class_id": "uk.а",
       "language": "uk",
       "gloss": "а",

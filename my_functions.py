@@ -283,7 +283,18 @@ def raw_keypoint_extraction(results) -> np.ndarray:
             lh = _flatten_landmarks_raw(results.right_hand_landmarks)
             rh = _flatten_landmarks_raw(results.left_hand_landmarks)
         else:
-            lh = _flatten_landmarks_raw(results.left_hand_landmarks)
+            left_pts = np.array(
+                [[res.x, res.y, res.z] for res in results.left_hand_landmarks.landmark]
+            )
+            right_pts = np.array(
+                [[res.x, res.y, res.z] for res in results.right_hand_landmarks.landmark]
+            )
+            if left_pts[0, 0] <= right_pts[0, 0]:
+                lh = _flatten_landmarks_raw(results.left_hand_landmarks)
+                rh = _flatten_landmarks_raw(results.right_hand_landmarks)
+            else:
+                lh = _flatten_landmarks_raw(results.right_hand_landmarks)
+                rh = _flatten_landmarks_raw(results.left_hand_landmarks)
     elif results.left_hand_landmarks:
         if is_left_hand(results.left_hand_landmarks):
             lh = _flatten_landmarks_raw(results.left_hand_landmarks)

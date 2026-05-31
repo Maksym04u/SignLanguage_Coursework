@@ -17,7 +17,7 @@ const FRAME_MS = 83;
 // per-sequence bounding boxes, the new gesture's first frame lands wherever
 // its own motion begins (e.g. ц starts near the top), which is usually far
 // from where the previous gesture ended.
-const COOLDOWN_MS = 500;
+const COOLDOWN_MS = 100;
 const GESTURE_HOLD_MS = 180; // brief hold on the final pose before advancing
 // Silent frames (whitespace / punctuation) flash through the sentence builder
 // without disturbing the stage. A tiny delay keeps the "typing" feel.
