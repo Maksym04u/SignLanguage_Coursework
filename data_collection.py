@@ -21,7 +21,7 @@ from label_registry import (
     load_labels,
 )
 from dataset.build_gesture_lexicon import update_lexicon_for_data_dir
-from dataset.build_translation_data import build_for_data_dir as build_translation_data_for
+from dataset.build_translation_data import write_raw_playback
 from dataset.collection_setup_ui import run_setup_dialog
 from dataset.label_builder import (
     build_labels_from_symbols,
@@ -116,6 +116,7 @@ class SignLanguageDataCollector:
                             raise KeyboardInterrupt
 
                     print("Recording...")
+                    raw_sequence_frames: List[np.ndarray] = []
                     for frame in range(self.frames):
                         ret, image = cap.read()
                         if not ret:
@@ -126,10 +127,12 @@ class SignLanguageDataCollector:
                         draw_landmarks(image, results)
 
                         keypoints = keypoint_extraction(results)
+                        raw_keypoints = raw_keypoint_extraction(results)
                         frame_path = os.path.join(
                             self.PATH, entry.data_dir, str(sequence), str(frame)
                         )
                         np.save(frame_path, keypoints)
+                        raw_sequence_frames.append(raw_keypoints)
 
                         put_ui_text(
                             image,
@@ -148,6 +151,12 @@ class SignLanguageDataCollector:
                         cv2.imshow("Camera", image)
                         cv2.waitKey(1)
 
+                    if write_raw_playback(entry.data_dir, raw_sequence_frames, sequence):
+                        logging.info(
+                            "Updated translation_data/%s from sequence %s (raw playback)",
+                            entry.data_dir,
+                            sequence,
+                        )
                     print("Sequence completed")
                     data_dirs_with_new_data.add(entry.data_dir)
 
@@ -165,18 +174,6 @@ class SignLanguageDataCollector:
                 except Exception:
                     logging.exception(
                         "Failed to refresh gesture lexicon for %s", data_dir
-                    )
-                try:
-                    used_seq = build_translation_data_for(data_dir)
-                    if used_seq is not None:
-                        logging.info(
-                            "Refreshed translation_data/%s from sequence %s",
-                            data_dir,
-                            used_seq,
-                        )
-                except Exception:
-                    logging.exception(
-                        "Failed to refresh translation_data for %s", data_dir
                     )
 
 

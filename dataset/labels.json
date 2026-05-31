@@ -282,6 +282,13 @@
       "data_dir": "en_letter_z"
     },
     {
+      "class_id": "uk.1",
+      "language": "uk",
+      "gloss": "1",
+      "display_text": "1",
+      "data_dir": "uk_letter_1"
+    },
+    {
       "class_id": "uk.а",
       "language": "uk",
       "gloss": "а",

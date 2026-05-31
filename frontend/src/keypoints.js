@@ -149,7 +149,7 @@ export function drawHandLandmarks(ctx, hands) {
   ctx.restore();
 }
 
-// --- Normalized-hand rendering for the gesture lexicon -----------------
+// --- Hand rendering for text-to-gesture playback -----------------------
 
 function hasHandData(vec) {
   if (!vec || vec.length !== HAND_VECTOR_LENGTH) return false;
@@ -159,15 +159,72 @@ function hasHandData(vec) {
   return false;
 }
 
+/** Target hand bbox height as a fraction of the camera frame (image coords). */
+export const RAW_TARGET_HAND_SPAN = 0.3;
+
+export function isRawLandmarkVector(vec) {
+  if (!vec || vec.length !== HAND_VECTOR_LENGTH) return false;
+  if (!hasHandData(vec)) return false;
+  let inImageSpace = 0;
+  for (let i = 0; i < LANDMARKS_PER_HAND; i++) {
+    const x = vec[i * COORDS_PER_LANDMARK];
+    const y = vec[i * COORDS_PER_LANDMARK + 1];
+    if (x >= -0.08 && x <= 1.08 && y >= -0.08 && y <= 1.08) inImageSpace++;
+  }
+  return inImageSpace >= 12;
+}
+
+export function isRawPlaybackFrame(lh, rh, playbackFormat) {
+  if (playbackFormat === "raw_v1") return true;
+  return isRawLandmarkVector(lh) || isRawLandmarkVector(rh);
+}
+
+/**
+ * Scale finger geometry relative to the wrist so every gesture appears at a
+ * similar hand size, while keeping the wrist position untouched (preserves
+ * whole-hand translation like ц top-to-bottom).
+ */
+export function standardizeRawHand(vec, targetSpan = RAW_TARGET_HAND_SPAN) {
+  if (!hasHandData(vec)) return vec;
+  let minX = Infinity;
+  let maxX = -Infinity;
+  let minY = Infinity;
+  let maxY = -Infinity;
+  for (let i = 0; i < LANDMARKS_PER_HAND; i++) {
+    const x = vec[i * COORDS_PER_LANDMARK];
+    const y = vec[i * COORDS_PER_LANDMARK + 1];
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  const span = Math.max(maxX - minX, maxY - minY, 1e-6);
+  const scale = targetSpan / span;
+  if (Math.abs(scale - 1) < 0.02) return vec;
+
+  const wx = vec[0];
+  const wy = vec[1];
+  const out = vec.slice();
+  for (let i = 0; i < LANDMARKS_PER_HAND; i++) {
+    const o = i * COORDS_PER_LANDMARK;
+    out[o] = wx + (vec[o] - wx) * scale;
+    out[o + 1] = wy + (vec[o + 1] - wy) * scale;
+  }
+  return out;
+}
+
+/** Standardize every frame in a raw playback clip for display. */
+export function prepareRawPlaybackSequence(sequence, targetSpan = RAW_TARGET_HAND_SPAN) {
+  if (!Array.isArray(sequence)) return [];
+  return sequence.map((frame) => ({
+    lh: standardizeRawHand(frame?.lh, targetSpan),
+    rh: standardizeRawHand(frame?.rh, targetSpan),
+  }));
+}
+
 /**
  * Compute the data-space bounding box of every hand across a 20-frame sequence.
- *
- * Returns ``{ lh, rh }`` where each is either ``null`` (hand absent for the
- * whole clip) or ``{ minX, maxX, minY, maxY }`` in the raw landmark space.
- * Passing this to ``drawGestureFrame`` via ``options.bounds`` makes the
- * playback use a single shared transform for the entire clip, so vertical /
- * horizontal motion (e.g. Ukrainian ц, щ) actually shows up on screen
- * instead of being normalised away into a tiny shake.
+ * Works for raw image coords (0..1) and legacy wrist-centered vectors.
  */
 export function computeSequenceBounds(sequence) {
   if (!Array.isArray(sequence) || sequence.length === 0) return null;
@@ -305,8 +362,21 @@ export function drawGestureFrame(canvas, lh, rh, options = {}) {
   ctx.fillStyle = options.background ?? "#0f172a";
   ctx.fillRect(0, 0, w, h);
 
-  const hasLh = hasHandData(lh);
-  const hasRh = hasHandData(rh);
+  const playbackFormat = options.playbackFormat ?? null;
+  const isRaw =
+    options.coordinateSpace === "raw" ||
+    isRawPlaybackFrame(lh, rh, playbackFormat);
+
+  let drawLh = lh;
+  let drawRh = rh;
+  if (isRaw) {
+    const targetSpan = options.targetHandSpan ?? RAW_TARGET_HAND_SPAN;
+    drawLh = standardizeRawHand(lh, targetSpan);
+    drawRh = standardizeRawHand(rh, targetSpan);
+  }
+
+  const hasLh = hasHandData(drawLh);
+  const hasRh = hasHandData(drawRh);
 
   if (!hasLh && !hasRh) {
     ctx.fillStyle = "rgba(148, 163, 184, 0.85)";
@@ -317,42 +387,37 @@ export function drawGestureFrame(canvas, lh, rh, options = {}) {
     return;
   }
 
-  // Larger canvases need thicker strokes/dots so the hand stays readable.
   const minSide = Math.min(w, h);
   const palette = {
     ...HAND_PALETTE,
     lineWidth: options.lineWidth ?? Math.max(2.5, minSide / 80),
     dotRadius: options.dotRadius ?? Math.max(3, minSide / 60),
   };
-  const padding = options.padding ?? 0.18;
+  const padding = options.padding ?? (isRaw ? 0.05 : 0.18);
   const lhBounds = options.bounds?.lh ?? null;
   const rhBounds = options.bounds?.rh ?? null;
+  const mirrorSingleHand = !isRaw;
 
   if (hasLh && hasRh) {
     const halfW = w / 2;
     strokeHand(
       ctx,
-      buildScreenPoints(lh, 0, 0, halfW, h, false, padding, lhBounds),
+      buildScreenPoints(drawLh, 0, 0, halfW, h, false, padding, lhBounds),
       palette
     );
-    // Right hand was mirrored on capture so it could share the canonical
-    // shape with the left; flip it back so two-hand gestures look natural.
     strokeHand(
       ctx,
-      buildScreenPoints(rh, halfW, 0, halfW, h, true, padding, rhBounds),
+      buildScreenPoints(drawRh, halfW, 0, halfW, h, !isRaw, padding, rhBounds),
       palette
     );
     return;
   }
 
-  const vec = hasLh ? lh : rh;
+  const vec = hasLh ? drawLh : drawRh;
   const handBounds = hasLh ? lhBounds : rhBounds;
-  // Single-hand stored data is already in canonical "left-hand" orientation.
-  // Mirror it so it looks like a right-hand seen from the front, which
-  // matches the experience of the live mirrored stream.
   strokeHand(
     ctx,
-    buildScreenPoints(vec, 0, 0, w, h, true, padding, handBounds),
+    buildScreenPoints(vec, 0, 0, w, h, mirrorSingleHand, padding, handBounds),
     palette
   );
 }

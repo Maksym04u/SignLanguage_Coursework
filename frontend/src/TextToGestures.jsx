@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { api } from "./api";
-import { computeSequenceBounds, drawGestureFrame } from "./keypoints";
+import {
+  computeSequenceBounds,
+  drawGestureFrame,
+  isRawPlaybackFrame,
+  prepareRawPlaybackSequence,
+} from "./keypoints";
 
 // Animation knobs (tuned per user feedback)
 // 12 fps recording rate -> 20 frames @ 83 ms = ~1.66 s of motion.
@@ -20,12 +25,8 @@ const SILENT_MS = 70;
 const MISSING_MS = 1100;
 
 // Rendering: 4:3 internal resolution matching the live-translation stage.
-// Padding is intentionally generous so the hand sits at ~one-third of the
-// canvas, leaving room for the actual gesture motion (e.g. ц / щ travelling
-// top-to-bottom) instead of being squeezed against the frame edges.
 const STAGE_WIDTH = 640;
 const STAGE_HEIGHT = 480;
-const STAGE_PADDING = 0.45;
 
 const SILENT_TYPES = new Set(["silent", "space"]);
 
@@ -40,7 +41,7 @@ function gestureDurationMs(frame) {
   return COOLDOWN_MS + seqLen * FRAME_MS + GESTURE_HOLD_MS;
 }
 
-function PlaybackStage({ frame, bounds, playing, done }) {
+function PlaybackStage({ frame, displaySequence, bounds, playing, done }) {
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -55,7 +56,10 @@ function PlaybackStage({ frame, bounds, playing, done }) {
       ctx.fillRect(0, 0, canvas.width, canvas.height);
     };
 
-    const drawOptions = { padding: STAGE_PADDING, bounds };
+    const drawOptions = {
+      bounds,
+      playbackFormat: frame?.playback_format ?? null,
+    };
 
     if (!frame) {
       paintBackground();
@@ -87,7 +91,7 @@ function PlaybackStage({ frame, bounds, playing, done }) {
       return undefined;
     }
 
-    const seq = Array.isArray(frame.sequence) ? frame.sequence : null;
+    const seq = Array.isArray(displaySequence) ? displaySequence : null;
 
     if (!seq || seq.length === 0) {
       drawGestureFrame(canvas, frame.lh, frame.rh, drawOptions);
@@ -103,16 +107,12 @@ function PlaybackStage({ frame, bounds, playing, done }) {
     let raf = 0;
     let cancelled = false;
     const start = performance.now();
-    // Paint frame 0 once immediately so the cooldown pose is visible
-    // without waiting for the first animation tick.
     drawGestureFrame(canvas, seq[0].lh, seq[0].rh, drawOptions);
 
     const loop = (now) => {
       if (cancelled) return;
       const elapsed = now - start;
       if (elapsed < COOLDOWN_MS) {
-        // Freeze on the first pose so the eye can find the new gesture
-        // before motion starts.
         raf = requestAnimationFrame(loop);
         return;
       }
@@ -120,7 +120,6 @@ function PlaybackStage({ frame, bounds, playing, done }) {
       const idx = Math.min(seq.length - 1, Math.floor(animElapsed / FRAME_MS));
       const pose = seq[idx];
       drawGestureFrame(canvas, pose.lh, pose.rh, drawOptions);
-      // Hold on the last pose until the controller advances to the next frame.
       if (idx >= seq.length - 1) return;
       raf = requestAnimationFrame(loop);
     };
@@ -130,7 +129,7 @@ function PlaybackStage({ frame, bounds, playing, done }) {
       cancelled = true;
       cancelAnimationFrame(raf);
     };
-  }, [frame, bounds, playing, done]);
+  }, [frame, displaySequence, bounds, playing, done]);
 
   return <canvas ref={canvasRef} className="gestureStageCanvas" />;
 }
@@ -211,13 +210,28 @@ export function TextToGestures({ token, language }) {
   const stageIsAnimating =
     isPlaybackRunning && frames[activeIdx] === stageFrame;
 
-  // Pre-compute one shared bounding box per clip so every frame is drawn
-  // with the same transform -> the hand actually moves across the canvas
-  // (e.g. ц top->bottom) instead of being re-fitted into the box per frame.
+  const displaySequence = useMemo(() => {
+    if (!stageFrame?.sequence?.length) return null;
+    const first = stageFrame.sequence[0];
+    if (
+      isRawPlaybackFrame(
+        first?.lh,
+        first?.rh,
+        stageFrame.playback_format ?? null
+      )
+    ) {
+      return prepareRawPlaybackSequence(stageFrame.sequence);
+    }
+    return stageFrame.sequence;
+  }, [stageFrame]);
+
+  // One shared bounding box per clip (after raw hand-size standardization)
+  // so motion trajectories are preserved frame-to-frame.
   const stageBounds = useMemo(() => {
+    if (displaySequence?.length) return computeSequenceBounds(displaySequence);
     if (!stageFrame || !Array.isArray(stageFrame.sequence)) return null;
     return computeSequenceBounds(stageFrame.sequence);
-  }, [stageFrame]);
+  }, [displaySequence, stageFrame]);
 
   const builtSentence = useMemo(() => {
     if (!frames.length) return "";
@@ -361,6 +375,7 @@ export function TextToGestures({ token, language }) {
           <div className="gestureStage">
             <PlaybackStage
               frame={stageFrame}
+              displaySequence={displaySequence}
               bounds={stageBounds}
               playing={stageIsAnimating}
               done={done}

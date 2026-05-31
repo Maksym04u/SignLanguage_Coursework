@@ -239,3 +239,60 @@ def keypoint_extraction(results):
     # Concatenate the normalized keypoints for both hands
     keypoints = np.concatenate([lh, rh])
     return keypoints
+
+
+def _flatten_landmarks_raw(landmarks) -> np.ndarray:
+    """MediaPipe image-space coords (x,y,z in [0,1] relative to frame), no normalization."""
+    if not landmarks:
+        return np.zeros(63, dtype=np.float64)
+    return (
+        np.array([[res.x, res.y, res.z] for res in landmarks.landmark], dtype=np.float64)
+        .flatten()
+    )
+
+
+def raw_keypoint_extraction(results) -> np.ndarray:
+    """
+    Extract raw hand landmarks for text-to-gesture playback.
+
+    Unlike ``keypoint_extraction``, positions are NOT wrist-centered or
+    spread-normalized. Each landmark keeps its MediaPipe image coordinate so
+    whole-hand motion (e.g. ц top-to-bottom) is preserved on playback.
+
+    The camera frame is flipped horizontally before MediaPipe (same as
+    collection UI), so coordinates match what the signer sees on screen.
+    """
+    def is_left_hand(landmarks):
+        if not landmarks:
+            return False
+        thumb_tip = landmarks.landmark[4]
+        index_tip = landmarks.landmark[8]
+        return thumb_tip.x > index_tip.x
+
+    lh = np.zeros(63, dtype=np.float64)
+    rh = np.zeros(63, dtype=np.float64)
+
+    if results.left_hand_landmarks and results.right_hand_landmarks:
+        left_is_left = is_left_hand(results.left_hand_landmarks)
+        right_is_left = is_left_hand(results.right_hand_landmarks)
+
+        if left_is_left and not right_is_left:
+            lh = _flatten_landmarks_raw(results.left_hand_landmarks)
+            rh = _flatten_landmarks_raw(results.right_hand_landmarks)
+        elif right_is_left and not left_is_left:
+            lh = _flatten_landmarks_raw(results.right_hand_landmarks)
+            rh = _flatten_landmarks_raw(results.left_hand_landmarks)
+        else:
+            lh = _flatten_landmarks_raw(results.left_hand_landmarks)
+    elif results.left_hand_landmarks:
+        if is_left_hand(results.left_hand_landmarks):
+            lh = _flatten_landmarks_raw(results.left_hand_landmarks)
+        else:
+            rh = _flatten_landmarks_raw(results.left_hand_landmarks)
+    elif results.right_hand_landmarks:
+        if is_left_hand(results.right_hand_landmarks):
+            lh = _flatten_landmarks_raw(results.right_hand_landmarks)
+        else:
+            rh = _flatten_landmarks_raw(results.right_hand_landmarks)
+
+    return np.concatenate([lh, rh])
