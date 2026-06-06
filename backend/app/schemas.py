@@ -49,6 +49,7 @@ class GestureFrame(BaseModel):
     type: str  # "word" | "letter" | "space" | "missing" | "silent"
     label: str
     gloss: Optional[str] = None
+    lemma: Optional[str] = None  # base form matched when an inflected word was typed
     class_id: Optional[str] = None
     language: Optional[str] = None
     lh: Optional[List[float]] = None
@@ -61,6 +62,7 @@ class GestureFrame(BaseModel):
 class TextToSignSummary(BaseModel):
     input_tokens: int
     words_matched: int
+    words_lemmatized: int = 0
     letters_matched: int
     letters_missing: List[str]
 

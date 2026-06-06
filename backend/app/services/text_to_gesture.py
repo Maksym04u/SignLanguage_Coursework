@@ -28,6 +28,8 @@ from typing import Any, Dict, List, Optional
 
 import numpy as np
 
+from .lemmatizer import lemmatizer_service
+
 logger = logging.getLogger("uvicorn.error")
 
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
@@ -282,6 +284,42 @@ class TextToGestureService:
             "sequence": None,
         }
 
+    def _resolve_lemmas(
+        self,
+        tokens_in: List[Dict[str, str]],
+        words: Dict[str, Dict[str, Any]],
+        language: str,
+    ) -> Dict[str, str]:
+        """Map inflected word tokens to their base form via the lemmatizer.
+
+        Only words that do *not* already have a direct whole-word gesture are
+        sent off (e.g. ``loves`` when only ``love`` exists). Returns
+        ``{lowered_word: lemma}``; empty when there is nothing to resolve or the
+        lemmatizer is unavailable.
+        """
+        if not words:
+            return {}
+
+        unmatched: List[str] = []
+        seen = set()
+        for tok in tokens_in:
+            if tok["kind"] != "word":
+                continue
+            lowered = tok["value"].lower()
+            if lowered in words or lowered in seen:
+                continue
+            seen.add(lowered)
+            unmatched.append(lowered)
+
+        if not unmatched:
+            return {}
+
+        try:
+            return lemmatizer_service.lemmatize(unmatched, language)
+        except Exception:
+            logger.exception("Lemmatization step failed")
+            return {}
+
     def translate(self, text: str, language: str) -> Dict[str, Any]:
         """Return gesture frames + a small summary block."""
         self._ensure_loaded()
@@ -290,9 +328,14 @@ class TextToGestureService:
         letters = self._letters_by_lang.get(language, {})
 
         tokens_in = self._tokenize(text or "")
+        # Reduce inflected words (loves -> love, любить -> любити) so they can
+        # still match a whole-word gesture instead of being spelled out.
+        lemma_map = self._resolve_lemmas(tokens_in, words, language)
+
         frames: List[Dict[str, Any]] = []
 
         words_matched = 0
+        words_lemmatized = 0
         letters_matched = 0
         letters_missing: List[str] = []
         word_tokens = 0
@@ -319,6 +362,18 @@ class TextToGestureService:
                 words_matched += 1
                 continue
 
+            # Inflected form whose base form has a whole-word gesture: play the
+            # base gesture but keep the typed word as the sentence label.
+            base = lemma_map.get(lowered)
+            if base and base != lowered and base in words:
+                frame = self._frame_from_entry(words[base], "word")
+                frame["label"] = value
+                frame["lemma"] = base
+                frames.append(frame)
+                words_matched += 1
+                words_lemmatized += 1
+                continue
+
             # Letter-by-letter fallback. Apostrophes/hyphens inside a word
             # become silent frames so the sentence still shows them.
             for ch in lowered:
@@ -337,6 +392,7 @@ class TextToGestureService:
             "summary": {
                 "input_tokens": word_tokens,
                 "words_matched": words_matched,
+                "words_lemmatized": words_lemmatized,
                 "letters_matched": letters_matched,
                 "letters_missing": letters_missing,
             },

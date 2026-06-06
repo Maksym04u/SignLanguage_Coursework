@@ -410,6 +410,11 @@ export function TextToGestures({ token, language }) {
             , {summary.letters_matched} letter
             {summary.letters_matched === 1 ? "" : "s"}
           </span>
+          {summary.words_lemmatized > 0 ? (
+            <span className="textToSignLemmas">
+              {summary.words_lemmatized} matched by base form
+            </span>
+          ) : null}
           {summary.letters_missing && summary.letters_missing.length > 0 ? (
             <span className="textToSignMissing">
               missing: {summary.letters_missing.join(", ")}
